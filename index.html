@@ -34,7 +34,7 @@
   const { useState, useRef, useCallback } = React;
 
   /* ───── Constants ───── */
-  const AUTHORS = ['瑀安','承熙','書愷','岷翰','宇軒','守恩','睿穎','楷元'];
+  const AUTHORS = ['小安','小熙','小愷','小翰','小軒','小恩','小穎','小元'];
   const CLASS_NAME = '六年甲班';
 
   const SCAFFOLDS = {
@@ -76,7 +76,7 @@
     {
       id: 1,
       title: '媽媽，謝謝您',
-      author: '六年甲班 瑀安',
+      author: '六年甲班 小安',
       titleTypo: { font: '', size: '' },
       imageUrl: '',
       imageSize: 'medium',
@@ -85,7 +85,7 @@
     {
       id: 2,
       title: '戶外教育真有趣',
-      author: '六年甲班 承熙',
+      author: '六年甲班 小熙',
       titleTypo: { font: '', size: '' },
       imageUrl: '',
       imageSize: 'medium',
@@ -94,7 +94,7 @@
     {
       id: 3,
       title: '我的好媽媽',
-      author: '六年甲班 書愷',
+      author: '六年甲班 小愷',
       titleTypo: { font: '', size: '' },
       imageUrl: '',
       imageSize: 'small',
@@ -152,8 +152,18 @@
     const updateTitleTypo = (id, field, value) =>
       setArticles(prev => prev.map(a => a.id === id ? { ...a, titleTypo: { ...(a.titleTypo || { font:'', size:'' }), [field]: value } } : a));
 
-    // Gallery / Albums
-    const [albums, setAlbums]           = useState([{ id: 'default', name: '班級相片', images: [] }]);
+    // Gallery / Albums — 預載 GitHub 母親節相片
+    const GITHUB_BASE = 'https://raw.githubusercontent.com/marypingu213-code/classrooom-newspaper/main/mother%27s%20day/';
+    const GITHUB_IMAGES = [
+      { id: 'gh1', url: GITHUB_BASE + '1.jpg' },
+      { id: 'gh2', url: GITHUB_BASE + '1.png' },
+      { id: 'gh3', url: GITHUB_BASE + '2.jpg' },
+      { id: 'gh4', url: GITHUB_BASE + '2.png' },
+      { id: 'gh5', url: GITHUB_BASE + '3.jpg' },
+      { id: 'gh6', url: GITHUB_BASE + '3.png' },
+      { id: 'gh7', url: GITHUB_BASE + '4.png' },
+    ];
+    const [albums, setAlbums]           = useState([{ id: 'default', name: '母親節相片 (GitHub)', images: GITHUB_IMAGES }]);
     const [activeAlbum, setActiveAlbum] = useState('default');
     const [galleryOpen, setGalleryOpen] = useState(false);
     const [selectFor, setSelectFor]     = useState(null);
