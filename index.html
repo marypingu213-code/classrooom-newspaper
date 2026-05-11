@@ -34,7 +34,7 @@
   const { useState, useRef, useCallback } = React;
 
   /* ───── Constants ───── */
-  const AUTHORS = ['小安','小熙','小愷','小翰','小軒','小恩','小穎','小元'];
+  const AUTHORS = ['小安','小熙','小愷','小翰','小軒','小恩','小穎','小元','小碩','小霈','小硯'];
   const CLASS_NAME = '六年甲班';
 
   const SCAFFOLDS = {
@@ -260,24 +260,59 @@
     const [toast, setToast] = useState('');
     const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(''), 3000); };
 
-    // Save / Load
+    // Save / Load — JSON 檔案匯出入（換電腦也能用）+ localStorage 備份
+    const getSnapshot = () => ({ pubName, pubSubtitle, pubDate, typo, articles, theme });
+
     const saveDraft = () => {
-      localStorage.setItem('np_draft_v3', JSON.stringify({ pubName, pubSubtitle, pubDate, typo, articles, theme }));
-      showToast('💾 進度已儲存！');
+      // 同時存 localStorage（當台電腦快速存取）
+      localStorage.setItem('np_draft_v3', JSON.stringify(getSnapshot()));
+      // 並下載 .json 檔案（跨電腦攜帶）
+      const blob = new Blob([JSON.stringify(getSnapshot(), null, 2)], { type: 'application/json' });
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      a.href     = url;
+      a.download = `班級小報_${pubDate.replace(/[年月日]/g,'')}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      showToast('💾 已下載進度檔，換電腦時載入即可！');
     };
-    const loadDraft = () => {
+
+    const loadDraftLocal = () => {
       const raw = localStorage.getItem('np_draft_v3');
-      if (!raw) { showToast('📂 目前沒有暫存資料。'); return; }
+      if (!raw) { showToast('📂 此電腦沒有暫存資料，請改用「載入檔案」。'); return; }
       try {
         const p = JSON.parse(raw);
-        if (p.pubName)    setPubName(p.pubName);
+        if (p.pubName)     setPubName(p.pubName);
         if (p.pubSubtitle) setPubSubtitle(p.pubSubtitle);
-        if (p.pubDate)    setPubDate(p.pubDate);
-        if (p.typo)       setTypo(p.typo);
-        if (p.articles)   setArticles(p.articles);
-        if (p.theme)      setTheme(p.theme);
-        showToast('✅ 已載入上次的進度！');
+        if (p.pubDate)     setPubDate(p.pubDate);
+        if (p.typo)        setTypo(p.typo);
+        if (p.articles)    setArticles(p.articles);
+        if (p.theme)       setTheme(p.theme);
+        showToast('✅ 已從此電腦載入上次進度！');
       } catch { showToast('❌ 讀取失敗，存檔資料有誤。'); }
+    };
+
+    const jsonInputRef = useRef(null);
+    const loadDraftFile = (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        try {
+          const p = JSON.parse(ev.target.result);
+          if (p.pubName)     setPubName(p.pubName);
+          if (p.pubSubtitle) setPubSubtitle(p.pubSubtitle);
+          if (p.pubDate)     setPubDate(p.pubDate);
+          if (p.typo)        setTypo(p.typo);
+          if (p.articles)    setArticles(p.articles);
+          if (p.theme)       setTheme(p.theme);
+          // 同步存到 localStorage
+          localStorage.setItem('np_draft_v3', JSON.stringify(p));
+          showToast('✅ 已從檔案載入進度！');
+        } catch { showToast('❌ 檔案格式有誤，請選正確的 .json 進度檔。'); }
+      };
+      reader.readAsText(file);
+      if (jsonInputRef.current) jsonInputRef.current.value = '';
     };
 
     /* ── Render content (newspaper columns) ── */
@@ -776,14 +811,33 @@
 
           {/* Bottom bar */}
           <div className="p-4 bg-gray-50 border-t border-gray-100 shrink-0 flex flex-col gap-2.5">
+            {/* 隱藏的 JSON 檔案輸入 */}
+            <input type="file" accept=".json" className="hidden" ref={jsonInputRef} onChange={loadDraftFile} />
+
+            {/* 說明文字 */}
+            <p className="text-[11px] text-gray-400 text-center leading-snug">
+              💡 <span className="font-semibold text-gray-500">換電腦</span>請用「匯出」帶走 .json，到新電腦「載入檔案」即可還原
+            </p>
+
+            {/* 第一排：匯出 + 載入兩種方式 */}
             <div className="flex gap-2">
-              <button onClick={saveDraft} className="flex-1 flex items-center justify-center gap-1.5 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 font-semibold py-2 rounded-lg text-sm transition-colors">
-                <i className="fas fa-save text-[13px]"></i> 儲存進度
+              <button onClick={saveDraft}
+                className="flex-1 flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 rounded-lg text-sm transition-colors shadow-sm">
+                <i className="fas fa-file-export text-[13px]"></i> 匯出進度
               </button>
-              <button onClick={loadDraft} className="flex-1 flex items-center justify-center gap-1.5 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 font-semibold py-2 rounded-lg text-sm transition-colors">
-                <i className="fas fa-folder-open text-[13px]"></i> 讀取進度
+              <button onClick={() => jsonInputRef.current?.click()}
+                className="flex-1 flex items-center justify-center gap-1.5 bg-white border-2 border-emerald-400 text-emerald-700 hover:bg-emerald-50 font-bold py-2.5 rounded-lg text-sm transition-colors">
+                <i className="fas fa-file-import text-[13px]"></i> 載入檔案
               </button>
             </div>
+
+            {/* 第二排：此電腦快速讀取 */}
+            <button onClick={loadDraftLocal}
+              className="w-full flex items-center justify-center gap-1.5 bg-white border border-gray-300 hover:bg-gray-50 text-gray-600 font-semibold py-2 rounded-lg text-xs transition-colors">
+              <i className="fas fa-desktop text-[12px]"></i> 讀取此電腦的暫存
+            </button>
+
+            {/* 第三排：列印 */}
             <button onClick={() => window.print()} className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-rose-500 to-orange-400 hover:from-rose-600 hover:to-orange-500 text-white font-bold py-3 rounded-xl transition-all shadow-md">
               <i className="fas fa-print text-[18px]"></i> 列印 / 匯出 PDF
             </button>
