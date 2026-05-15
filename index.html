@@ -246,17 +246,20 @@
         }else if(firstValid){firstValid=false;}
         return <p key={i} className={`mb-3 ${dc}`}>{p}</p>;
       });
-      if(!imgUrl) return <div className="clearfix">{rendered}</div>;
+      if(!imgUrl) return <div>{rendered}</div>;
       if(th==='retro'||th==='modern'){
-        const base=th==='retro'?'border-[5px] border-double border-stone-800 p-1 sepia-[.4] grayscale-[.5] shadow-sm object-cover':'grayscale border border-zinc-300 shadow-sm object-cover';
-        const cls=imgSize==='small'?`float-left w-1/3 mr-4 mb-2 ${base}`:imgSize==='large'?`block w-full mb-4 ${base}`:`float-right w-1/2 ml-5 mb-3 ${base}`;
-        return <div className="clearfix"><img src={imgUrl} alt="配圖" className={cls} onError={e=>e.target.style.display='none'}/>{rendered}</div>;
+        /* Grid 格子已很窄，改用 block 置頂；大小控制圖片高度 */
+        const base=th==='retro'
+          ?'block w-full border-[4px] border-double border-stone-800 p-0.5 sepia-[.4] grayscale-[.5] shadow-sm object-cover mb-3'
+          :'block w-full grayscale border border-zinc-300 shadow-sm object-cover mb-3';
+        const h=imgSize==='small'?'h-28':imgSize==='large'?'h-52':'h-40';
+        return <div><img src={imgUrl} alt="配圖" className={`${base} ${h}`} onError={e=>e.target.style.display='none'}/>{rendered}</div>;
       }
       if(th==='newsletter'){
         const cls=imgSize==='small'?'w-1/2 rounded-lg mx-auto block object-cover shadow-md mb-6':imgSize==='large'?'w-full rounded-2xl object-cover shadow-md mb-6 h-64':'w-3/4 rounded-xl mx-auto block object-cover shadow-md mb-6';
         return <React.Fragment><img src={imgUrl} alt="配圖" className={cls} onError={e=>e.target.style.display='none'}/>{rendered}</React.Fragment>;
       }
-      return <div className="clearfix">{rendered}</div>;
+      return <div>{rendered}</div>;
     };
 
     /* ── Mic Button ── */
@@ -342,10 +345,10 @@
             </div>
           </div>
         </div>
-        {/* column-fill:auto prevents balancing, so columns fill top-to-bottom and page-break is predictable */}
-        <div className="columns-2 md:columns-3 lg:columns-4 gap-8 text-justify text-[15px] leading-relaxed relative z-10" style={getTypoStyle('artContent')}>
+        <div className="text-justify text-[15px] leading-relaxed relative z-10"
+          style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'1.8rem 2rem',alignItems:'start',...getTypoStyle('artContent')}}>
           {articles.map(a=>(
-            <div key={a.id} className="article-col-block mb-10 pb-6 border-b-2 border-dotted border-stone-400/60">
+            <div key={a.id} style={{breakInside:'avoid',pageBreakInside:'avoid'}} className="pb-5 border-b-2 border-dotted border-stone-400/60">
               <h2 className="text-2xl font-black mb-2 leading-snug border-t-[3px] border-stone-800 pt-2" style={getArtTitleStyle(a)}>{a.title||'（未填標題）'}</h2>
               <div className="text-stone-600 font-bold mb-3 tracking-wide text-sm" style={getTypoStyle('artAuthor')}>撰文 / {a.author||'（未填作者）'}</div>
               {renderContent(a.content,'retro',a.imageUrl,a.imageSize)}
@@ -370,9 +373,10 @@
             </div>
           </div>
         </div>
-        <div className="columns-2 md:columns-3 lg:columns-4 gap-8 text-justify text-base leading-relaxed relative z-10" style={getTypoStyle('artContent')}>
+        <div className="text-justify text-base leading-relaxed relative z-10"
+          style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'1.8rem 2rem',alignItems:'start',...getTypoStyle('artContent')}}>
           {articles.map(a=>(
-            <div key={a.id} className="article-col-block mb-12 pb-8 border-b-[3px] border-zinc-100">
+            <div key={a.id} style={{breakInside:'avoid',pageBreakInside:'avoid'}} className="pb-8 border-b-[3px] border-zinc-100">
               <h2 className="text-3xl font-black tracking-tight mb-3 leading-tight" style={getArtTitleStyle(a)}>{a.title||'（未填標題）'}</h2>
               <div className="flex items-center gap-2 mb-4 pb-3 border-b-2 border-zinc-900 text-sm font-bold text-zinc-500 uppercase tracking-wider" style={getTypoStyle('artAuthor')}>
                 <i className="fas fa-user text-[12px]"></i>{a.author||'（未填作者）'}
