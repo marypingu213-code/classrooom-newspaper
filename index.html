@@ -343,7 +343,7 @@
           </div>
         </div>
         {/* column-fill:auto prevents balancing, so columns fill top-to-bottom and page-break is predictable */}
-        <div className="columns-2 md:columns-3 lg:columns-4 gap-8 text-justify text-[15px] leading-relaxed relative z-10" style={{...getTypoStyle('artContent'), columnFill:'auto'}}>
+        <div className="columns-2 md:columns-3 lg:columns-4 gap-8 text-justify text-[15px] leading-relaxed relative z-10" style={getTypoStyle('artContent')}>
           {articles.map(a=>(
             <div key={a.id} className="article-col-block mb-10 pb-6 border-b-2 border-dotted border-stone-400/60">
               <h2 className="text-2xl font-black mb-2 leading-snug border-t-[3px] border-stone-800 pt-2" style={getArtTitleStyle(a)}>{a.title||'（未填標題）'}</h2>
@@ -370,7 +370,7 @@
             </div>
           </div>
         </div>
-        <div className="columns-2 md:columns-3 lg:columns-4 gap-8 text-justify text-base leading-relaxed relative z-10" style={{...getTypoStyle('artContent'), columnFill:'auto'}}>
+        <div className="columns-2 md:columns-3 lg:columns-4 gap-8 text-justify text-base leading-relaxed relative z-10" style={getTypoStyle('artContent')}>
           {articles.map(a=>(
             <div key={a.id} className="article-col-block mb-12 pb-8 border-b-[3px] border-zinc-100">
               <h2 className="text-3xl font-black tracking-tight mb-3 leading-tight" style={getArtTitleStyle(a)}>{a.title||'（未填標題）'}</h2>
