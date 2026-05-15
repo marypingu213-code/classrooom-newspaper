@@ -35,7 +35,6 @@
 
   /* ───── Constants ───── */
   const AUTHORS = ['小安','小熙','小愷','小翰','小軒','小恩','小穎','小元','小碩','小霈','小硯'];
-  const CLASS_NAME = '六年甲班';
 
   const SCAFFOLDS = {
     motherday: {
@@ -76,7 +75,7 @@
     {
       id: 1,
       title: '媽媽，謝謝您',
-      author: '六年甲班 小安',
+      author: '小安',
       titleTypo: { font: '', size: '' },
       imageUrl: '',
       imageSize: 'medium',
@@ -85,7 +84,7 @@
     {
       id: 2,
       title: '戶外教育真有趣',
-      author: '六年甲班 小熙',
+      author: '小熙',
       titleTypo: { font: '', size: '' },
       imageUrl: '',
       imageSize: 'medium',
@@ -94,7 +93,7 @@
     {
       id: 3,
       title: '我的好媽媽',
-      author: '六年甲班 小愷',
+      author: '小愷',
       titleTypo: { font: '', size: '' },
       imageUrl: '',
       imageSize: 'small',
@@ -107,7 +106,7 @@
     // Publication
     const [pubName, setPubName]         = useState('六年甲班小報');
     const [pubSubtitle, setPubSubtitle] = useState('CLASS TIMES');
-    const [pubDate, setPubDate]         = useState('2026年5月8日');
+    const [pubDate, setPubDate]         = useState('2026年5月11日');
     const [theme, setTheme]             = useState('retro');
 
     // Typography
@@ -319,11 +318,17 @@
     const renderContent = (content, th, imgUrl, imgSize) => {
       const paras = (content || '').split('\n');
       let firstValid = true;
+      
       const rendered = paras.map((p, i) => {
         if (!p.trim()) return <div key={i} className="h-3" />;
         let dc = '';
-        if (firstValid && th === 'retro') {
-          dc = 'first-letter:text-5xl first-letter:font-bold first-letter:text-stone-800 first-letter:float-left first-letter:mr-2 first-letter:mt-[-0.1em] first-letter:leading-none';
+        
+        // 【變更點 4】只有電子報主題才會有內文首字放大
+        if (firstValid && th === 'newsletter') {
+          dc = 'first-letter:text-4xl first-letter:font-bold first-letter:text-rose-500 first-letter:float-left first-letter:mr-2 first-letter:mt-[-0.1em] first-letter:leading-none';
+          firstValid = false;
+        } else if (firstValid) {
+          // 消耗掉 firstValid 狀態，確保其他段落不會被誤判
           firstValid = false;
         }
         return <p key={i} className={`mb-3 ${dc}`}>{p}</p>;
@@ -367,20 +372,32 @@
     const RetroPreview = () => (
       <div className="bg-[#f4ebd8] text-stone-900 font-serif p-8 md:p-12 border border-stone-300 w-full max-w-[420mm] min-h-[297mm] shadow-xl print:shadow-none print:border-none relative">
         <div className="absolute left-1/2 top-0 bottom-0 border-l-2 border-dashed border-stone-400/30 print:hidden pointer-events-none transform -translate-x-1/2 z-0"></div>
-        <div className="text-center border-b-[6px] border-double border-stone-800 pb-6 mb-8 relative z-10">
+        
+        {/* 【變更點 1】 text-left 讓刊物名稱靠左對齊 */}
+        <div className="text-left border-b-[6px] border-double border-stone-800 pb-6 mb-8 relative z-10 w-full">
           {pubSubtitle && <div className="text-lg tracking-[0.4em] font-bold text-stone-600 mb-3" style={getTypoStyle('pubSubtitle')}>【 {pubSubtitle} 】</div>}
-          <h1 className="text-6xl md:text-8xl font-black mb-4 text-stone-900 tracking-widest" style={getTypoStyle('pubName')}>{pubName}</h1>
-          <div className="flex justify-between items-center text-sm border-t-2 border-b-2 border-stone-800 py-2 px-4 font-bold uppercase tracking-wider">
-            <span style={getTypoStyle('pubDate')}>發行日期：{pubDate}</span>
-            <span>🌸 母親節特刊 × 戶外教育 🌿</span>
-            <span>收錄：{articles.length} 篇</span>
+          <h1 className="text-6xl md:text-8xl font-black mb-6 text-stone-900 tracking-widest" style={getTypoStyle('pubName')}>{pubName}</h1>
+          
+          <div className="flex justify-between items-center text-sm border-t-2 border-b-2 border-stone-800 py-2 px-2 font-bold uppercase tracking-wider">
+            {/* 【變更點 2】 母親節特刊移到左側 */}
+            <div className="flex gap-4">
+              <span>🌸 母親節特刊 × 戶外教育 🌿</span>
+            </div>
+            {/* 【變更點 3】 發行日期移到右側與收錄篇數並排 */}
+            <div className="flex gap-6 text-right">
+              <span style={getTypoStyle('pubDate')}>發行日期：{pubDate}</span>
+              <span>收錄：{articles.length} 篇</span>
+            </div>
           </div>
         </div>
+
         <div className="columns-2 md:columns-3 lg:columns-4 gap-8 text-justify text-[15px] leading-relaxed relative z-10" style={getTypoStyle('artContent')}>
           {articles.map(a => (
             <div key={a.id} className="break-inside-avoid mb-10 pb-6 border-b-2 border-dotted border-stone-400/60">
               <h2 className="text-2xl font-black mb-2 leading-snug border-t-[3px] border-stone-800 pt-2" style={getArtTitleStyle(a)}>{a.title || '（未填標題）'}</h2>
-              <div className="text-stone-600 font-bold mb-3 tracking-wide text-sm" style={getTypoStyle('artAuthor')}>撰文 / {a.author || '（未填作者）'}</div>
+              <div className="text-stone-600 font-bold mb-3 tracking-wide text-sm" style={getTypoStyle('artAuthor')}>
+                撰文 / {a.author || '（未填作者）'}
+              </div>
               {renderContent(a.content, 'retro', a.imageUrl, a.imageSize)}
             </div>
           ))}
@@ -392,14 +409,23 @@
     const ModernPreview = () => (
       <div className="bg-white text-zinc-900 font-sans p-8 md:p-12 w-full max-w-[420mm] min-h-[297mm] shadow-xl print:shadow-none relative">
         <div className="absolute left-1/2 top-0 bottom-0 border-l-2 border-dashed border-zinc-200 print:hidden pointer-events-none transform -translate-x-1/2 z-0"></div>
-        <div className="border-b-[8px] border-zinc-900 pb-5 mb-10 relative z-10">
+        
+        {/* 【變更點 1】 text-left 讓刊物名稱靠左對齊 */}
+        <div className="text-left border-b-[8px] border-zinc-900 pb-5 mb-10 relative z-10">
           <div className="text-sm font-black text-zinc-500 uppercase tracking-[0.3em] mb-2" style={getTypoStyle('pubSubtitle')}>{pubSubtitle}</div>
-          <h1 className="text-7xl md:text-9xl font-black tracking-tighter leading-none mb-4" style={getTypoStyle('pubName')}>{pubName}</h1>
-          <div className="flex justify-between text-sm font-bold text-zinc-600 border-t-2 border-zinc-200 pt-3 uppercase tracking-widest">
-            <span style={getTypoStyle('pubDate')}>🌸 母親節 × 戶外教育特刊</span>
-            <span className="bg-zinc-900 text-white px-3 py-1">{pubDate}</span>
+          <h1 className="text-7xl md:text-9xl font-black tracking-tighter leading-none mb-6" style={getTypoStyle('pubName')}>{pubName}</h1>
+          
+          <div className="flex justify-between items-center text-sm font-bold text-zinc-600 border-t-2 border-zinc-200 pt-3 uppercase tracking-widest">
+            {/* 【變更點 2】 母親節特刊移到左側 */}
+            <span className="text-zinc-800">🌸 母親節 × 戶外教育特刊 🌿</span>
+            {/* 【變更點 3】 發行日期移到右側 */}
+            <div className="flex items-center gap-4">
+              <span style={getTypoStyle('pubDate')}>發行日期：{pubDate}</span>
+              <span className="bg-zinc-900 text-white px-3 py-1">收錄：{articles.length} 篇</span>
+            </div>
           </div>
         </div>
+
         <div className="columns-2 md:columns-3 lg:columns-4 gap-8 text-justify text-base leading-relaxed relative z-10" style={getTypoStyle('artContent')}>
           {articles.map(a => (
             <div key={a.id} className="break-inside-avoid mb-12 pb-8 border-b-[3px] border-zinc-100">
@@ -677,6 +703,7 @@
                       <label className="block text-xs font-semibold text-gray-600 mb-1.5 flex items-center gap-1">
                         <i className="fas fa-user text-[11px]"></i> 作者
                       </label>
+                      {/* 【變更點 5】 作者選單現在只顯示名字，不再有六年甲班 */}
                       <select
                         value={art.author}
                         onChange={e => updateArticle(art.id, 'author', e.target.value)}
@@ -684,7 +711,7 @@
                       >
                         <option value="">— 請選擇作者 —</option>
                         {AUTHORS.map(name => (
-                          <option key={name} value={`${CLASS_NAME} ${name}`}>{name}</option>
+                          <option key={name} value={name}>{name}</option>
                         ))}
                       </select>
                     </div>
