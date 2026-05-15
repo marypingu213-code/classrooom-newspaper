@@ -75,9 +75,9 @@
   };
 
   const DEFAULT_ARTICLES = [
-    { id: 1, title: '媽媽，謝謝您', author: '小安', titleTypo: { font: '', size: '' }, imageUrl: '', imageSize: 'medium', content: '媽媽每天幫我準備早餐。\n媽媽很溫柔，也很勤勞。\n我最喜歡媽媽的笑容。\n我想對媽媽說：謝謝你每天照顧我。\n媽媽辛苦了，我愛你。' },
-    { id: 2, title: '戶外教育真有趣', author: '小熙', titleTypo: { font: '', size: '' }, imageUrl: '', imageSize: 'medium', content: '我們去了科學博物館。\n我看到了恐龍骨骼，覺得很酷。\n我最喜歡觸控螢幕，因為可以自己操作。\n我和同學一起玩尋寶遊戲。\n這次校外教學，我很開心。' },
-    { id: 3, title: '我的好媽媽', author: '小愷', titleTypo: { font: '', size: '' }, imageUrl: '', imageSize: 'small', content: '媽媽喜歡看書和做蛋糕。\n媽媽常常幫我梳頭髮。\n我要送媽媽一張卡片，讓她開心。\n媽媽是世界上最好的人。' }
+    { id: 1, title: '媽媽，謝謝您', author: '小安', titleTypo: { font: '', size: '' }, imageUrl: '', imageSize: 'medium', colSpan: 1, content: '媽媽每天幫我準備早餐。\n媽媽很溫柔，也很勤勞。\n我最喜歡媽媽的笑容。\n我想對媽媽說：謝謝你每天照顧我。\n媽媽辛苦了，我愛你。' },
+    { id: 2, title: '戶外教育真有趣', author: '小熙', titleTypo: { font: '', size: '' }, imageUrl: '', imageSize: 'medium', colSpan: 1, content: '我們去了科學博物館。\n我看到了恐龍骨骼，覺得很酷。\n我最喜歡觸控螢幕，因為可以自己操作。\n我和同學一起玩尋寶遊戲。\n這次校外教學，我很開心。' },
+    { id: 3, title: '我的好媽媽', author: '小愷', titleTypo: { font: '', size: '' }, imageUrl: '', imageSize: 'small', colSpan: 1, content: '媽媽喜歡看書和做蛋糕。\n媽媽常常幫我梳頭髮。\n我要送媽媽一張卡片，讓她開心。\n媽媽是世界上最好的人。' }
   ];
 
   /* ───── App ───── */
@@ -115,7 +115,7 @@
 
     const addArticle = () => setArticles(prev => [
       ...prev,
-      { id: Date.now(), title: '', author: '', content: '', imageUrl: '', imageSize: 'medium', titleTypo: { font: '', size: '' } }
+      { id: Date.now(), title: '', author: '', content: '', imageUrl: '', imageSize: 'medium', colSpan: 1, titleTypo: { font: '', size: '' } }
     ]);
     const removeArticle  = (id) => { if (articles.length > 1) setArticles(prev => prev.filter(a => a.id !== id)); };
     const updateArticle  = useCallback((id, field, value) =>
@@ -234,7 +234,7 @@
     };
 
     /* ── Render content ── */
-    const renderContent=(content,th,imgUrl,imgSize)=>{
+    const renderContent=(content,th,imgUrl,imgSize,colSpan=1)=>{
       const paras=(content||'').split('\n');
       let firstValid=true;
       const rendered=paras.map((p,i)=>{
@@ -252,7 +252,8 @@
         const base=th==='retro'
           ?'block w-full border-[4px] border-double border-stone-800 p-0.5 sepia-[.4] grayscale-[.5] shadow-sm object-cover mb-3'
           :'block w-full grayscale border border-zinc-300 shadow-sm object-cover mb-3';
-        const h=imgSize==='small'?'h-28':imgSize==='large'?'h-52':'h-40';
+        const baseH=colSpan>=2?{small:48,medium:64,large:80}:{small:28,medium:40,large:52};
+        const h=`h-${baseH[imgSize]||40}`;
         return <div><img src={imgUrl} alt="配圖" className={`${base} ${h}`} onError={e=>e.target.style.display='none'}/>{rendered}</div>;
       }
       if(th==='newsletter'){
@@ -348,10 +349,10 @@
         <div className="text-justify text-[15px] leading-relaxed relative z-10"
           style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'1.8rem 2rem',alignItems:'start',...getTypoStyle('artContent')}}>
           {articles.map(a=>(
-            <div key={a.id} style={{breakInside:'avoid',pageBreakInside:'avoid'}} className="pb-5 border-b-2 border-dotted border-stone-400/60">
+            <div key={a.id} style={{breakInside:'avoid',pageBreakInside:'avoid',gridColumn:`span ${a.colSpan||1}`}} className="pb-5 border-b-2 border-dotted border-stone-400/60">
               <h2 className="text-2xl font-black mb-2 leading-snug border-t-[3px] border-stone-800 pt-2" style={getArtTitleStyle(a)}>{a.title||'（未填標題）'}</h2>
               <div className="text-stone-600 font-bold mb-3 tracking-wide text-sm" style={getTypoStyle('artAuthor')}>撰文 / {a.author||'（未填作者）'}</div>
-              {renderContent(a.content,'retro',a.imageUrl,a.imageSize)}
+              {renderContent(a.content,'retro',a.imageUrl,a.imageSize,a.colSpan||1)}
             </div>
           ))}
         </div>
@@ -376,12 +377,12 @@
         <div className="text-justify text-base leading-relaxed relative z-10"
           style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'1.8rem 2rem',alignItems:'start',...getTypoStyle('artContent')}}>
           {articles.map(a=>(
-            <div key={a.id} style={{breakInside:'avoid',pageBreakInside:'avoid'}} className="pb-8 border-b-[3px] border-zinc-100">
+            <div key={a.id} style={{breakInside:'avoid',pageBreakInside:'avoid',gridColumn:`span ${a.colSpan||1}`}} className="pb-8 border-b-[3px] border-zinc-100">
               <h2 className="text-3xl font-black tracking-tight mb-3 leading-tight" style={getArtTitleStyle(a)}>{a.title||'（未填標題）'}</h2>
               <div className="flex items-center gap-2 mb-4 pb-3 border-b-2 border-zinc-900 text-sm font-bold text-zinc-500 uppercase tracking-wider" style={getTypoStyle('artAuthor')}>
                 <i className="fas fa-user text-[12px]"></i>{a.author||'（未填作者）'}
               </div>
-              {renderContent(a.content,'modern',a.imageUrl,a.imageSize)}
+              {renderContent(a.content,'modern',a.imageUrl,a.imageSize,a.colSpan||1)}
             </div>
           ))}
         </div>
@@ -623,9 +624,22 @@
                           </span>
                         )}
                       </div>
-                      <button onClick={()=>removeArticle(art.id)} className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg opacity-0 group-hover:opacity-100 transition-all" title="刪除">
-                        <i className="fas fa-trash-alt text-[13px]"></i>
-                      </button>
+                      <div className="flex items-center gap-2">
+                        {/* colSpan selector */}
+                        <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1">
+                          <i className="fas fa-table-columns text-[10px] text-slate-400"></i>
+                          <span className="text-[10px] text-slate-500 font-semibold mr-0.5">佔欄</span>
+                          {[1,2,3,4].map(n=>(
+                            <button key={n} onClick={()=>updateArticle(art.id,'colSpan',n)}
+                              className={`w-5 h-5 text-[10px] font-black rounded transition-colors ${(art.colSpan||1)===n?'bg-indigo-500 text-white':'text-slate-400 hover:bg-slate-200'}`}>
+                              {n}
+                            </button>
+                          ))}
+                        </div>
+                        <button onClick={()=>removeArticle(art.id)} className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg opacity-0 group-hover:opacity-100 transition-all" title="刪除">
+                          <i className="fas fa-trash-alt text-[13px]"></i>
+                        </button>
+                      </div>
                     </div>
 
                     {/* Title + Mic */}
