@@ -11,7 +11,6 @@
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <style>
     @media print {
-      @page { size: A3 landscape; margin: 0; }
       body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     }
     body { font-family: ui-sans-serif, system-ui, sans-serif; }
@@ -34,7 +33,7 @@
   const { useState, useRef, useCallback } = React;
 
   /* ───── Constants ───── */
-  const AUTHORS = ['小盧','小欣','小晴','小銓','小洋','小沄','小齊','小舜','小安','小凱','小熙','小睿','小硯','小碩','小翰','小愷','小霈','小恩','小元','小穎','小軒','小宥','小涵','小翔'];
+  const AUTHORS = ['小安','小熙','小愷','小翰','小軒','小恩','小穎','小元','小碩','小霈','小硯'];
 
   const SCAFFOLDS = {
     motherday: {
@@ -108,6 +107,7 @@
     const [pubSubtitle, setPubSubtitle] = useState('CLASS TIMES');
     const [pubDate, setPubDate]         = useState('2026年5月11日');
     const [theme, setTheme]             = useState('retro');
+    const [paperSize, setPaperSize]     = useState('A3'); // 'A3' or '8K'
 
     // Typography
     const [typo, setTypo] = useState({
@@ -260,7 +260,7 @@
     const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(''), 3000); };
 
     // Save / Load — JSON 檔案匯出入（換電腦也能用）+ localStorage 備份
-    const getSnapshot = () => ({ pubName, pubSubtitle, pubDate, typo, articles, theme });
+    const getSnapshot = () => ({ pubName, pubSubtitle, pubDate, typo, articles, theme, paperSize });
 
     const saveDraft = () => {
       // 同時存 localStorage（當台電腦快速存取）
@@ -287,6 +287,7 @@
         if (p.typo)        setTypo(p.typo);
         if (p.articles)    setArticles(p.articles);
         if (p.theme)       setTheme(p.theme);
+        if (p.paperSize)   setPaperSize(p.paperSize);
         showToast('✅ 已從此電腦載入上次進度！');
       } catch { showToast('❌ 讀取失敗，存檔資料有誤。'); }
     };
@@ -305,6 +306,7 @@
           if (p.typo)        setTypo(p.typo);
           if (p.articles)    setArticles(p.articles);
           if (p.theme)       setTheme(p.theme);
+          if (p.paperSize)   setPaperSize(p.paperSize);
           // 同步存到 localStorage
           localStorage.setItem('np_draft_v3', JSON.stringify(p));
           showToast('✅ 已從檔案載入進度！');
@@ -370,7 +372,7 @@
 
     /* ── Newspaper Preview: Retro ── */
     const RetroPreview = () => (
-      <div className="bg-[#f4ebd8] text-stone-900 font-serif p-8 md:p-12 border border-stone-300 w-full max-w-[420mm] min-h-[297mm] shadow-xl print:shadow-none print:border-none relative">
+      <div className={`bg-[#f4ebd8] text-stone-900 font-serif p-8 md:p-12 border border-stone-300 w-full shadow-xl print:shadow-none print:border-none relative ${paperSize === 'A3' ? 'max-w-[420mm] min-h-[297mm]' : 'max-w-[390mm] min-h-[270mm]'}`}>
         <div className="absolute left-1/2 top-0 bottom-0 border-l-2 border-dashed border-stone-400/30 print:hidden pointer-events-none transform -translate-x-1/2 z-0"></div>
         
         {/* 【變更點 1】 text-left 讓刊物名稱靠左對齊 */}
@@ -407,7 +409,7 @@
 
     /* ── Newspaper Preview: Modern ── */
     const ModernPreview = () => (
-      <div className="bg-white text-zinc-900 font-sans p-8 md:p-12 w-full max-w-[420mm] min-h-[297mm] shadow-xl print:shadow-none relative">
+      <div className={`bg-white text-zinc-900 font-sans p-8 md:p-12 w-full shadow-xl print:shadow-none relative ${paperSize === 'A3' ? 'max-w-[420mm] min-h-[297mm]' : 'max-w-[390mm] min-h-[270mm]'}`}>
         <div className="absolute left-1/2 top-0 bottom-0 border-l-2 border-dashed border-zinc-200 print:hidden pointer-events-none transform -translate-x-1/2 z-0"></div>
         
         {/* 【變更點 1】 text-left 讓刊物名稱靠左對齊 */}
@@ -570,6 +572,11 @@
     /* ── Main Render ── */
     return (
       <div className="min-h-screen bg-gray-100 flex flex-col md:flex-row font-sans">
+        
+        {/* 動態注入列印時的紙張尺寸 CSS */}
+        <style>
+          {`@media print { @page { size: ${paperSize === 'A3' ? 'A3 landscape' : '390mm 270mm'}; margin: 0; } }`}
+        </style>
 
         {/* ═══════════════ LEFT PANEL ═══════════════ */}
         <div className="w-full md:w-[370px] lg:w-[400px] bg-white shadow-xl z-20 flex flex-col print:hidden h-screen overflow-y-auto shrink-0 relative">
@@ -608,6 +615,21 @@
                   <div><div className="font-bold text-sm">電子報</div><div className="text-xs text-gray-500">直式 · 彩色漸層 · 大圖焦點</div></div>
                 </button>
               </div>
+
+              {/* 紙張尺寸選擇 (僅報紙風格顯示) */}
+              {theme !== 'newsletter' && (
+                <div className="mt-5">
+                  <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">紙張尺寸</p>
+                  <div className="flex gap-2">
+                    <button onClick={() => setPaperSize('A3')} className={`flex-1 py-2 text-sm font-bold rounded-xl border-2 transition-colors ${paperSize === 'A3' ? 'bg-indigo-50 border-indigo-500 text-indigo-700' : 'bg-white border-gray-200 text-gray-500 hover:border-indigo-300'}`}>
+                      A3 <span className="text-[10px] font-normal block text-gray-500 mt-0.5">42 × 29.7 cm</span>
+                    </button>
+                    <button onClick={() => setPaperSize('8K')} className={`flex-1 py-2 text-sm font-bold rounded-xl border-2 transition-colors ${paperSize === '8K' ? 'bg-indigo-50 border-indigo-500 text-indigo-700' : 'bg-white border-gray-200 text-gray-500 hover:border-indigo-300'}`}>
+                      8K (8開) <span className="text-[10px] font-normal block text-gray-500 mt-0.5">39 × 27 cm</span>
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
 
             <hr className="border-gray-100" />
