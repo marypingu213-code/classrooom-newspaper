@@ -1,1021 +1,438 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>學生作品排版產生器 — 母親節 × 戶外教育特刊</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-  <style>
-    @media print {
-      body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    }
-    body { font-family: ui-sans-serif, system-ui, sans-serif; }
-    /* ── Page-break fix: inline-block forces column-break avoidance in all browsers ── */
-    .article-col-block {
-      display: inline-block;
-      width: 100%;
-      break-inside: avoid;
-      page-break-inside: avoid;
-    }
-    @keyframes mic-pulse {
-      0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.5); }
-      50% { box-shadow: 0 0 0 8px rgba(239, 68, 68, 0); }
-    }
-    .mic-listening { animation: mic-pulse 1.2s ease-in-out infinite; }
-    @keyframes toast-in {
-      from { opacity: 0; transform: translateX(-50%) translateY(-10px); }
-      to   { opacity: 1; transform: translateX(-50%) translateY(0); }
-    }
-    .toast-anim { animation: toast-in 0.25s ease; }
-
-    /* Quick-nav pill active highlight */
-    .qnav-pill { transition: all 0.15s ease; }
-    .qnav-pill:hover { transform: translateY(-1px); }
-
-    /* Scrollbar for left panel */
-    .panel-scroll::-webkit-scrollbar { width: 4px; }
-    .panel-scroll::-webkit-scrollbar-track { background: transparent; }
-    .panel-scroll::-webkit-scrollbar-thumb { background: #e5e7eb; border-radius: 4px; }
-
-    /* ── Interactive layout handles (hidden in print) ── */
-    .art-wrapper { position: relative; }
-    .art-wrapper .drag-handle,
-    .art-wrapper .resize-handle { opacity: 0; transition: opacity 0.15s; }
-    .art-wrapper:hover .drag-handle,
-    .art-wrapper:hover .resize-handle { opacity: 1; }
-
-    /* drag handle — top-centre grip */
-    .drag-handle {
-      position: absolute; top: -2px; left: 50%; transform: translateX(-50%);
-      cursor: grab; background: #6366f1; color: #fff;
-      padding: 2px 10px; border-radius: 0 0 8px 8px;
-      font-size: 11px; display: flex; align-items: center; gap: 4px;
-      user-select: none; z-index: 30; white-space: nowrap;
-    }
-    .drag-handle:active { cursor: grabbing; }
-
-    /* resize handle — right-centre bar */
-    .resize-handle {
-      position: absolute; top: 50%; right: -12px;
-      transform: translateY(-50%);
-      cursor: col-resize; background: #6366f1; color: #fff;
-      width: 20px; height: 40px; border-radius: 6px;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 13px; z-index: 30; user-select: none;
-    }
-
-    /* drag-over highlight */
-    .drag-over-target { outline: 3px dashed #6366f1 !important; outline-offset: 4px; }
-
-    /* dragging dim */
-    .is-dragging { opacity: 0.35; }
-
-    /* resizing glow */
-    .is-resizing { outline: 3px solid #f59e0b !important; outline-offset: 2px; }
-
-    @media print {
-      .drag-handle, .resize-handle { display: none !important; }
-    }
-  </style>
-</head>
-<body>
-<div id="root"></div>
-<script type="text/babel">
-  const { useState, useRef, useCallback } = React;
-
-  /* ───── Constants ───── */
-  const AUTHORS = ['小齊', '小欣', '小晴', '小銓', '小洋', '小沄', '小盧', '小舜', '小安', '小凱', '小熙', '小睿', '小硯', '小碩', '小翰', '小愷', '小霈', '小恩', '小元', '小穎', '小軒', '小宥', '小涵'];
-
-  const SCAFFOLDS = {
-    motherday: {
-      label: '🌸 母親節',
-      color: 'rose',
-      prompts: [
-        '媽媽長得很___。','媽媽喜歡___。','媽媽常常幫我___。',
-        '我最喜歡媽媽___。','媽媽很___，因為___。',
-        '我想對媽媽說：謝謝你___。','媽媽辛苦了，她每天___。',
-        '我和媽媽一起___，很___。','我要送媽媽___，讓她___。',
-        '媽媽是世界上最___的人。',
-      ]
-    },
-    outdoor: {
-      label: '🌿 戶外教育',
-      color: 'green',
-      prompts: [
-        '我們去了___。','我看到了___，覺得很___。','我覺得___很有趣。',
-        '我最喜歡___，因為___。','我和同學一起___。','我學到了___。',
-        '天氣很___，我感覺___。','老師說___，我覺得___。',
-        '下次我還想去___。','這次校外教學，我很___。',
-      ]
-    }
-  };
-
-  const DEFAULT_ARTICLES = [
-    { id: 1, title: '媽媽，謝謝您', author: '小安', titleTypo: { font: '', size: '' }, imageUrl: '', imageSize: 'medium', imageWidth: null, colSpan: 1, content: '媽媽每天幫我準備早餐。\n媽媽很溫柔，也很勤勞。\n我最喜歡媽媽的笑容。\n我想對媽媽說：謝謝你每天照顧我。\n媽媽辛苦了，我愛你。' },
-    { id: 2, title: '戶外教育真有趣', author: '小熙', titleTypo: { font: '', size: '' }, imageUrl: '', imageSize: 'medium', imageWidth: null, colSpan: 1, content: '我們去了科學博物館。\n我看到了恐龍骨骼，覺得很酷。\n我最喜歡觸控螢幕，因為可以自己操作。\n我和同學一起玩尋寶遊戲。\n這次校外教學，我很開心。' },
-    { id: 3, title: '我的好媽媽', author: '小愷', titleTypo: { font: '', size: '' }, imageUrl: '', imageSize: 'small', imageWidth: null, colSpan: 1, content: '媽媽喜歡看書和做蛋糕。\n媽媽常常幫我梳頭髮。\n我要送媽媽一張卡片，讓她開心。\n媽媽是世界上最好的人。' }
-  ];
-
-  /* ───── App ───── */
-  function App() {
-    const [pubName, setPubName]         = useState('六年甲班小報');
-    const [pubSubtitle, setPubSubtitle] = useState('CLASS TIMES');
-    const [pubDate, setPubDate]         = useState('2026年5月11日');
-    const [theme, setTheme]             = useState('retro');
-    const [paperSize, setPaperSize]     = useState('A3');
-
-    const [typo, setTypo] = useState({
-      pubName:    { font: '', size: '' }, pubSubtitle:{ font: '', size: '' },
-      pubDate:    { font: '', size: '' }, artAuthor:  { font: '', size: '' },
-      artContent: { font: '', size: '' },
-    });
-    const [showTypo, setShowTypo] = useState(false);
-
-    const fontOpts = [
-      { label: '預設', value: '' }, { label: '黑體', value: 'sans-serif' },
-      { label: '明體', value: 'serif' },
-      { label: '楷體', value: '"BiauKai","DFKai-SB","KaiTi","標楷體",serif' },
-    ];
-    const getTypoStyle   = (key) => { const s={}; if(typo[key]?.font) s.fontFamily=typo[key].font; if(typo[key]?.size) s.fontSize=`${typo[key].size}px`; return s; };
-    const getArtTitleStyle = (art) => { const s={}; if(art.titleTypo?.font) s.fontFamily=art.titleTypo.font; if(art.titleTypo?.size) s.fontSize=`${art.titleTypo.size}px`; return s; };
-
-    const [articles, setArticles] = useState(DEFAULT_ARTICLES);
-
-    /* ── article refs for quick-nav scroll ── */
-    const articleRefs = useRef({});
-    const scrollToArticle = (id) => {
-      const el = articleRefs.current[id];
-      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    };
-
-    /* ── Drag-to-reorder ── */
-    const [draggingId, setDraggingId] = useState(null);
-    const [dragOverId, setDragOverId] = useState(null);
-    const [dragEnabled, setDragEnabled] = useState(null); // only set when grip is held
-
-    const handleDragStart = (e, artId) => {
-      if (dragEnabled !== artId) { e.preventDefault(); return; } // block unless grip held
-      setDraggingId(artId);
-      e.dataTransfer.effectAllowed = 'move';
-    };
-    const handleDragOver = (e, artId) => {
-      e.preventDefault();
-      e.dataTransfer.dropEffect = 'move';
-      if (artId !== draggingId) setDragOverId(artId);
-    };
-    const handleDrop = (e, targetId) => {
-      e.preventDefault();
-      if (!draggingId || draggingId === targetId) { setDraggingId(null); setDragOverId(null); setDragEnabled(null); return; }
-      setArticles(prev => {
-        const arr = [...prev];
-        const from = arr.findIndex(a => a.id === draggingId);
-        const to   = arr.findIndex(a => a.id === targetId);
-        const [removed] = arr.splice(from, 1);
-        arr.splice(to, 0, removed);
-        return arr;
-      });
-      setDraggingId(null); setDragOverId(null); setDragEnabled(null);
-    };
-    const handleDragEnd = () => { setDraggingId(null); setDragOverId(null); setDragEnabled(null); };
-
-    /* ── Resize-by-drag (right edge handle) ── */
-    const gridRef = useRef(null);
-    const [resizingId, setResizingId] = useState(null);
-
-    const handleResizeStart = useCallback((e, artId, currentSpan) => {
-      e.preventDefault(); e.stopPropagation();
-      setResizingId(artId);
-      const startX    = e.clientX;
-      const startSpan = currentSpan;
-
-      const onMove = (mv) => {
-        if (!gridRef.current) return;
-        const colW  = gridRef.current.offsetWidth / 4;
-        const delta = Math.round((mv.clientX - startX) / colW);
-        const next  = Math.max(1, Math.min(4, startSpan + delta));
-        setArticles(prev => prev.map(a => a.id === artId ? { ...a, colSpan: next } : a));
-      };
-      const onUp = () => {
-        setResizingId(null);
-        document.removeEventListener('mousemove', onMove);
-        document.removeEventListener('mouseup',   onUp);
-      };
-      document.addEventListener('mousemove', onMove);
-      document.addEventListener('mouseup',   onUp);
-    }, []);
-
-    const addArticle = () => setArticles(prev => [
-      ...prev,
-      { id: Date.now(), title: '', author: '', content: '', imageUrl: '', imageSize: 'medium', imageWidth: null, colSpan: 1, titleTypo: { font: '', size: '' } }
-    ]);
-    const removeArticle  = (id) => { if (articles.length > 1) setArticles(prev => prev.filter(a => a.id !== id)); };
-    const updateArticle  = useCallback((id, field, value) =>
-      setArticles(prev => prev.map(a => a.id === id ? { ...a, [field]: value } : a)), []);
-    const updateTitleTypo = (id, field, value) =>
-      setArticles(prev => prev.map(a => a.id === id ? { ...a, titleTypo: { ...(a.titleTypo || {font:'',size:''}), [field]: value } } : a));
-
-    /* ── Gallery ── */
-    const GITHUB_BASE = 'https://raw.githubusercontent.com/marypingu213-code/classrooom-newspaper/main/mother%27s%20day/';
-    const GITHUB_IMAGES = [
-      { id: 'gh1', url: GITHUB_BASE + '1.jpg' }, { id: 'gh2', url: GITHUB_BASE + '1.png' },
-      { id: 'gh3', url: GITHUB_BASE + '2.jpg' }, { id: 'gh4', url: GITHUB_BASE + '2.png' },
-      { id: 'gh5', url: GITHUB_BASE + '3.jpg' }, { id: 'gh6', url: GITHUB_BASE + '3.png' },
-      { id: 'gh7', url: GITHUB_BASE + '4.png' },
-    ];
-    const [albums, setAlbums]           = useState([{ id: 'default', name: '母親節相片 (GitHub)', images: GITHUB_IMAGES }]);
-    const [activeAlbum, setActiveAlbum] = useState('default');
-    const [galleryOpen, setGalleryOpen] = useState(false);
-    const [selectFor, setSelectFor]     = useState(null);
-    const [editAlbumId, setEditAlbumId] = useState(null);
-    const [editAlbumName, setEditAlbumName] = useState('');
-    const galleryRef = useRef(null);
-
-    const openGalleryFor  = (artId) => { setSelectFor(artId); setGalleryOpen(true); };
-    const closeGallery    = () => { setSelectFor(null); setGalleryOpen(false); };
-    const createAlbum     = () => { const id=Date.now().toString(); setAlbums(prev=>[...prev,{id,name:'新相簿',images:[]}]); setActiveAlbum(id); setEditAlbumId(id); setEditAlbumName('新相簿'); };
-    const saveAlbumName   = (id) => { if(editAlbumName.trim()) setAlbums(prev=>prev.map(a=>a.id===id?{...a,name:editAlbumName}:a)); setEditAlbumId(null); };
-    const deleteAlbum     = (id) => { if(albums.length<=1) return; const next=albums.filter(a=>a.id!==id); setAlbums(next); if(activeAlbum===id) setActiveAlbum(next[0].id); };
-    const uploadToGallery = (e) => { const files=Array.from(e.target.files); if(!files.length) return; const imgs=files.map(f=>({id:Math.random().toString(),url:URL.createObjectURL(f)})); setAlbums(prev=>prev.map(a=>a.id===activeAlbum?{...a,images:[...a.images,...imgs]}:a)); if(galleryRef.current) galleryRef.current.value=''; };
-    const selectFromGallery = (url) => { if(selectFor){updateArticle(selectFor,'imageUrl',url);updateArticle(selectFor,'imageSize','medium');} closeGallery(); showToast('✅ 照片已加入報紙！'); };
-    const deleteGalleryImg = (albumId, imgId) => setAlbums(prev=>prev.map(a=>a.id===albumId?{...a,images:a.images.filter(i=>i.id!==imgId)}:a));
-
-    const directUpload = (artId, e) => {
-      const file=e.target.files[0]; if(!file) return;
-      updateArticle(artId,'imageUrl',URL.createObjectURL(file));
-      updateArticle(artId,'imageSize','medium');
-      showToast('✅ 照片已加入報紙！');
-      e.target.value='';
-    };
-
-    /* ── Voice ── */
-    const [isListening, setIsListening] = useState(false);
-    const [voiceTarget, setVoiceTarget] = useState(null);
-    const recognitionRef = useRef(null);
-
-    const startVoice = (artId, field) => {
-      if(isListening){recognitionRef.current?.stop(); return;}
-      const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-      if(!SR){showToast('⚠️ 請使用 Chrome 或 Edge 瀏覽器以支援語音輸入'); return;}
-      const rec=new SR();
-      rec.lang='zh-TW'; rec.continuous=(field==='content'); rec.interimResults=false;
-      rec.onstart=()=>{setIsListening(true);setVoiceTarget({artId,field});};
-      rec.onend=()=>{setIsListening(false);setVoiceTarget(null);};
-      rec.onerror=()=>{setIsListening(false);setVoiceTarget(null);showToast('⚠️ 語音辨識失敗，請再試一次');};
-      rec.onresult=(ev)=>{
-        const text=Array.from(ev.results).slice(ev.resultIndex).map(r=>r[0].transcript).join('');
-        setArticles(prev=>prev.map(a=>{
-          if(a.id!==artId) return a;
-          if(field==='title') return{...a,title:text};
-          if(field==='content') return{...a,content:(a.content?a.content+'\n':'')+text};
-          return a;
-        }));
-      };
-      recognitionRef.current=rec; rec.start();
-    };
-    const stopVoice=()=>recognitionRef.current?.stop();
-
-    /* ── Scaffold ── */
-    const [scaffoldOpen, setScaffoldOpen] = useState({});
-    const [scaffoldTab,  setScaffoldTab]  = useState({});
-    const toggleScaffold=(id)=>{setScaffoldOpen(prev=>({...prev,[id]:!prev[id]}));setScaffoldTab(prev=>prev[id]?prev:{...prev,[id]:'motherday'});};
-    const addScaffold=(artId,text)=>setArticles(prev=>prev.map(a=>a.id===artId?{...a,content:(a.content?a.content+'\n':'')+text}:a));
-
-    /* ── Toast ── */
-    const [toast, setToast] = useState('');
-    const showToast=(msg)=>{setToast(msg); setTimeout(()=>setToast(''),3000);};
-
-    /* ── Save / Load ── */
-    const getSnapshot=()=>({pubName,pubSubtitle,pubDate,typo,articles,theme,paperSize});
-    const saveDraft=()=>{
-      localStorage.setItem('np_draft_v3',JSON.stringify(getSnapshot()));
-      const blob=new Blob([JSON.stringify(getSnapshot(),null,2)],{type:'application/json'});
-      const url=URL.createObjectURL(blob); const a=document.createElement('a');
-      a.href=url; a.download=`班級小報_${pubDate.replace(/[年月日]/g,'')}.json`; a.click(); URL.revokeObjectURL(url);
-      showToast('💾 已下載進度檔，換電腦時載入即可！');
-    };
-    const loadDraftLocal=()=>{
-      const raw=localStorage.getItem('np_draft_v3');
-      if(!raw){showToast('📂 此電腦沒有暫存資料，請改用「載入檔案」。'); return;}
-      try{
-        const p=JSON.parse(raw);
-        if(p.pubName) setPubName(p.pubName); if(p.pubSubtitle) setPubSubtitle(p.pubSubtitle);
-        if(p.pubDate) setPubDate(p.pubDate); if(p.typo) setTypo(p.typo);
-        if(p.articles) setArticles(p.articles); if(p.theme) setTheme(p.theme);
-        if(p.paperSize) setPaperSize(p.paperSize);
-        showToast('✅ 已從此電腦載入上次進度！');
-      }catch{showToast('❌ 讀取失敗，存檔資料有誤。');}
-    };
-    const jsonInputRef=useRef(null);
-    const loadDraftFile=(e)=>{
-      const file=e.target.files[0]; if(!file) return;
-      const reader=new FileReader();
-      reader.onload=(ev)=>{
-        try{
-          const p=JSON.parse(ev.target.result);
-          if(p.pubName) setPubName(p.pubName); if(p.pubSubtitle) setPubSubtitle(p.pubSubtitle);
-          if(p.pubDate) setPubDate(p.pubDate); if(p.typo) setTypo(p.typo);
-          if(p.articles) setArticles(p.articles); if(p.theme) setTheme(p.theme);
-          if(p.paperSize) setPaperSize(p.paperSize);
-          localStorage.setItem('np_draft_v3',JSON.stringify(p));
-          showToast('✅ 已從檔案載入進度！');
-        }catch{showToast('❌ 檔案格式有誤，請選正確的 .json 進度檔。');}
-      };
-      reader.readAsText(file);
-      if(jsonInputRef.current) jsonInputRef.current.value='';
-    };
-
-    /* ── Render content ── */
-    const renderContent=(content,th,imgUrl,imgSize,colSpan=1,imageWidth=null,artId=null)=>{
-      const paras=(content||'').split('\n');
-      let firstValid=true;
-      const rendered=paras.map((p,i)=>{
-        if(!p.trim()) return <div key={i} className="h-3"/>;
-        let dc='';
-        if(firstValid&&th==='newsletter'){
-          dc='first-letter:text-4xl first-letter:font-bold first-letter:text-rose-500 first-letter:float-left first-letter:mr-2 first-letter:mt-[-0.1em] first-letter:leading-none';
-          firstValid=false;
-        }else if(firstValid){firstValid=false;}
-        return <p key={i} className={`mb-3 ${dc}`}>{p}</p>;
-      });
-      if(!imgUrl) return <div>{rendered}</div>;
-
-      if(th==='retro'||th==='modern'){
-        /* 等比例縮放：控制寬度百分比，高度 auto 自動跟著比例 */
-        const presetW = {small: 60, medium: 80, large: 100};
-        const w = imageWidth ?? presetW[imgSize] ?? 80;
-        const border = th==='retro'
-          ? 'border-[4px] border-double border-stone-800 p-0.5 shadow-sm'
-          : 'border border-zinc-300 shadow-sm';
-
-        /* 拖曳右邊緣改寬度 */
-        const onImgResize = artId ? (e) => {
-          e.preventDefault(); e.stopPropagation();
-          const container = e.currentTarget.closest('.img-resize-wrap');
-          if (!container) return;
-          const rect = container.getBoundingClientRect();
-          const startX = e.clientX;
-          const startW = w;
-          const onMove = (mv) => {
-            const dx = mv.clientX - startX;
-            const pct = Math.round(Math.max(20, Math.min(100, startW + (dx / rect.width) * 100)));
-            setArticles(prev => prev.map(a => a.id === artId ? {...a, imageWidth: pct} : a));
-          };
-          const onUp = () => {
-            document.removeEventListener('mousemove', onMove);
-            document.removeEventListener('mouseup', onUp);
-          };
-          document.addEventListener('mousemove', onMove);
-          document.addEventListener('mouseup', onUp);
-        } : null;
-
-        return (
-          <div>
-            <div className="img-resize-wrap relative mb-3 group/img" style={{width:'100%'}}>
-              <img src={imgUrl} alt="配圖" draggable={false}
-                className={`block object-contain ${border}`}
-                style={{width:`${w}%`, height:'auto'}}
-                onError={e=>e.target.style.display='none'}/>
-              {/* 右邊拖曳把手 */}
-              {onImgResize && (
-                <div onMouseDown={onImgResize}
-                  style={{left:`${w}%`, top:'50%', transform:'translateY(-50%)'}}
-                  className="print:hidden absolute w-4 h-10 bg-indigo-500 rounded-full flex items-center justify-center cursor-ew-resize opacity-0 group-hover/img:opacity-100 transition-opacity z-20 shadow -ml-2"
-                  title="左右拖曳等比例縮放圖片">
-                  <i className="fas fa-grip-lines-vertical text-white text-[9px]"></i>
-                </div>
-              )}
-            </div>
-            {rendered}
-          </div>
-        );
-      }
-      if(th==='newsletter'){
-        const cls=imgSize==='small'?'w-1/2 rounded-lg mx-auto block object-cover shadow-md mb-6':imgSize==='large'?'w-full rounded-2xl object-cover shadow-md mb-6 h-64':'w-3/4 rounded-xl mx-auto block object-cover shadow-md mb-6';
-        return <React.Fragment><img src={imgUrl} alt="配圖" className={cls} onError={e=>e.target.style.display='none'}/>{rendered}</React.Fragment>;
-      }
-      return <div>{rendered}</div>;
-    };
-
-    /* ── Mic Button ── */
-    const MicBtn=({artId,field})=>{
-      const active=isListening&&voiceTarget?.artId===artId&&voiceTarget?.field===field;
-      return(
-        <button onClick={()=>active?stopVoice():startVoice(artId,field)}
-          title={active?'點擊停止錄音':field==='title'?'語音輸入標題':'語音輸入內文（說完一句後自動斷句）'}
-          className={`shrink-0 w-9 h-9 rounded-lg flex items-center justify-center transition-all ${active?'bg-red-500 text-white mic-listening':'bg-gray-100 text-gray-500 hover:bg-indigo-100 hover:text-indigo-600'}`}>
-          <i className={`fas ${active?'fa-stop':'fa-microphone'} text-[15px]`}></i>
-        </button>
-      );
-    };
-
-    /* ════════════════════════════════════════
-       ── Student Quick-Nav Bar ──
-       Shows a pill for every article that has an author.
-       Clicking scrolls the left panel to that card.
-    ════════════════════════════════════════ */
-    const QuickNav=()=>{
-      const filled=articles.filter(a=>a.author);
-      if(!filled.length) return null;
-
-      // colour palette cycling
-      const colours=[
-        'bg-rose-100 text-rose-700 border-rose-300 hover:bg-rose-500 hover:text-white hover:border-rose-500',
-        'bg-violet-100 text-violet-700 border-violet-300 hover:bg-violet-500 hover:text-white hover:border-violet-500',
-        'bg-sky-100 text-sky-700 border-sky-300 hover:bg-sky-500 hover:text-white hover:border-sky-500',
-        'bg-emerald-100 text-emerald-700 border-emerald-300 hover:bg-emerald-500 hover:text-white hover:border-emerald-500',
-        'bg-amber-100 text-amber-700 border-amber-300 hover:bg-amber-500 hover:text-white hover:border-amber-500',
-        'bg-pink-100 text-pink-700 border-pink-300 hover:bg-pink-500 hover:text-white hover:border-pink-500',
-        'bg-indigo-100 text-indigo-700 border-indigo-300 hover:bg-indigo-500 hover:text-white hover:border-indigo-500',
-        'bg-teal-100 text-teal-700 border-teal-300 hover:bg-teal-500 hover:text-white hover:border-teal-500',
-      ];
-
-      return (
-        <div className="bg-gradient-to-br from-slate-50 to-white border border-slate-200 rounded-2xl p-3.5 shadow-sm">
-          <div className="flex items-center gap-2 mb-2.5">
-            <div className="w-5 h-5 bg-gradient-to-br from-pink-500 to-orange-400 rounded-md flex items-center justify-center shrink-0">
-              <i className="fas fa-users text-white text-[9px]"></i>
-            </div>
-            <p className="text-xs font-bold text-slate-600 tracking-wide">快速跳到學生</p>
-            <span className="ml-auto text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full font-semibold">{filled.length} 位</span>
-          </div>
-
-          <div className="flex flex-wrap gap-1.5">
-            {articles.map((art, idx) => {
-              if (!art.author) return null;
-              const c = colours[idx % colours.length];
-              return (
-                <button
-                  key={art.id}
-                  onClick={() => scrollToArticle(art.id)}
-                  className={`qnav-pill px-2.5 py-1 text-xs font-bold rounded-lg border ${c} flex items-center gap-1`}
-                  title={art.title || '（未填標題）'}
-                >
-                  {art.author}
-                </button>
-              );
-            })}
-          </div>
-
-          <p className="text-[10px] text-slate-400 mt-2 flex items-center gap-1">
-            <i className="fas fa-hand-point-up text-[10px]"></i>
-            點名字直接跳到那篇作品的編輯區
-          </p>
-        </div>
-      );
-    };
-
-    /* ── Preview: Retro ── */
-    const RetroPreview=()=>(
-      <div className={`bg-[#f4ebd8] text-stone-900 font-serif p-8 md:p-12 border border-stone-300 w-full shadow-xl print:shadow-none print:border-none relative ${paperSize==='A3'?'max-w-[420mm] min-h-[297mm]':'max-w-[390mm] min-h-[270mm]'}`}>
-        <div className="absolute left-1/2 top-0 bottom-0 border-l-2 border-dashed border-stone-400/30 print:hidden pointer-events-none transform -translate-x-1/2 z-0"></div>
-        <div className="text-left border-b-[6px] border-double border-stone-800 pb-6 mb-8 relative z-10 w-full">
-          {pubSubtitle&&<div className="text-lg tracking-[0.4em] font-bold text-stone-600 mb-3" style={getTypoStyle('pubSubtitle')}>【 {pubSubtitle} 】</div>}
-          <h1 className="text-6xl md:text-8xl font-black mb-6 text-stone-900 tracking-widest" style={getTypoStyle('pubName')}>{pubName}</h1>
-          <div className="flex justify-between items-center text-sm border-t-2 border-b-2 border-stone-800 py-2 px-2 font-bold uppercase tracking-wider">
-            <div className="flex gap-4"><span>🌸 母親節特刊 × 戶外教育 🌿</span></div>
-            <div className="flex gap-6 text-right">
-              <span style={getTypoStyle('pubDate')}>發行日期：{pubDate}</span>
-              <span>收錄：{articles.length} 篇</span>
-            </div>
-          </div>
-        </div>
-        <div ref={gridRef} className="print-grid text-justify text-[15px] leading-relaxed relative z-10"
-          style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'2rem 2rem',alignItems:'start',...getTypoStyle('artContent')}}>
-          {articles.map(a=>(
-            <div key={a.id}
-              className={`art-wrapper pb-5 border-b-2 border-dotted border-stone-400/60 ${draggingId===a.id?'is-dragging':''} ${dragOverId===a.id?'drag-over-target':''} ${resizingId===a.id?'is-resizing':''}`}
-              style={{breakInside:'avoid',pageBreakInside:'avoid',gridColumn:`span ${a.colSpan||1}`,position:'relative'}}
-              draggable={dragEnabled===a.id}
-              onDragStart={e=>handleDragStart(e,a.id)}
-              onDragOver={e=>handleDragOver(e,a.id)}
-              onDrop={e=>handleDrop(e,a.id)}
-              onDragEnd={handleDragEnd}
-            >
-              {/* ★ Drag handle — 按住才啟動拖曳 */}
-              <div className="drag-handle print:hidden"
-                onMouseDown={e=>{e.stopPropagation(); setDragEnabled(a.id);}}
-                onMouseUp={()=>setDragEnabled(null)}
-              >
-                <i className="fas fa-grip-horizontal text-[11px]"></i>
-                <span style={{fontSize:'10px'}}>{a.author||'拖曳移動'}</span>
-              </div>
-              {/* ★ Resize handle */}
-              <div className="resize-handle print:hidden"
-                draggable={false}
-                onMouseDown={e=>{e.stopPropagation(); handleResizeStart(e,a.id,a.colSpan||1);}}
-                title={`目前 ${a.colSpan||1} 欄，左右拖曳調整`}>
-                <i className="fas fa-arrows-left-right text-[12px]"></i>
-              </div>
-              <h2 className="text-2xl font-black mb-2 leading-snug border-t-[3px] border-stone-800 pt-2" style={getArtTitleStyle(a)}>{a.title||'（未填標題）'}</h2>
-              <div className="text-stone-600 font-bold mb-3 tracking-wide text-sm" style={getTypoStyle('artAuthor')}>撰文 / {a.author||'（未填作者）'}</div>
-              {renderContent(a.content,'retro',a.imageUrl,a.imageSize,a.colSpan||1,a.imageWidth??null,a.id)}
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-
-    /* ── Preview: Modern ── */
-    const ModernPreview=()=>(
-      <div className={`bg-white text-zinc-900 font-sans p-8 md:p-12 w-full shadow-xl print:shadow-none relative ${paperSize==='A3'?'max-w-[420mm] min-h-[297mm]':'max-w-[390mm] min-h-[270mm]'}`}>
-        <div className="absolute left-1/2 top-0 bottom-0 border-l-2 border-dashed border-zinc-200 print:hidden pointer-events-none transform -translate-x-1/2 z-0"></div>
-        <div className="text-left border-b-[8px] border-zinc-900 pb-5 mb-10 relative z-10">
-          <div className="text-sm font-black text-zinc-500 uppercase tracking-[0.3em] mb-2" style={getTypoStyle('pubSubtitle')}>{pubSubtitle}</div>
-          <h1 className="text-7xl md:text-9xl font-black tracking-tighter leading-none mb-6" style={getTypoStyle('pubName')}>{pubName}</h1>
-          <div className="flex justify-between items-center text-sm font-bold text-zinc-600 border-t-2 border-zinc-200 pt-3 uppercase tracking-widest">
-            <span className="text-zinc-800">🌸 母親節 × 戶外教育特刊 🌿</span>
-            <div className="flex items-center gap-4">
-              <span style={getTypoStyle('pubDate')}>發行日期：{pubDate}</span>
-              <span className="bg-zinc-900 text-white px-3 py-1">收錄：{articles.length} 篇</span>
-            </div>
-          </div>
-        </div>
-        <div ref={gridRef} className="print-grid text-justify text-base leading-relaxed relative z-10"
-          style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'2rem 2rem',alignItems:'start',...getTypoStyle('artContent')}}>
-          {articles.map(a=>(
-            <div key={a.id}
-              className={`art-wrapper pb-8 border-b-[3px] border-zinc-100 ${draggingId===a.id?'is-dragging':''} ${dragOverId===a.id?'drag-over-target':''} ${resizingId===a.id?'is-resizing':''}`}
-              style={{breakInside:'avoid',pageBreakInside:'avoid',gridColumn:`span ${a.colSpan||1}`,position:'relative'}}
-              draggable={dragEnabled===a.id}
-              onDragStart={e=>handleDragStart(e,a.id)}
-              onDragOver={e=>handleDragOver(e,a.id)}
-              onDrop={e=>handleDrop(e,a.id)}
-              onDragEnd={handleDragEnd}
-            >
-              {/* ★ Drag handle — 按住才啟動拖曳 */}
-              <div className="drag-handle print:hidden"
-                onMouseDown={e=>{e.stopPropagation(); setDragEnabled(a.id);}}
-                onMouseUp={()=>setDragEnabled(null)}
-              >
-                <i className="fas fa-grip-horizontal text-[11px]"></i>
-                <span style={{fontSize:'10px'}}>{a.author||'拖曳移動'}</span>
-              </div>
-              {/* ★ Resize handle */}
-              <div className="resize-handle print:hidden"
-                draggable={false}
-                onMouseDown={e=>{e.stopPropagation(); handleResizeStart(e,a.id,a.colSpan||1);}}
-                title={`目前 ${a.colSpan||1} 欄，左右拖曳調整`}>
-                <i className="fas fa-arrows-left-right text-[12px]"></i>
-              </div>
-              <h2 className="text-3xl font-black tracking-tight mb-3 leading-tight" style={getArtTitleStyle(a)}>{a.title||'（未填標題）'}</h2>
-              <div className="flex items-center gap-2 mb-4 pb-3 border-b-2 border-zinc-900 text-sm font-bold text-zinc-500 uppercase tracking-wider" style={getTypoStyle('artAuthor')}>
-                <i className="fas fa-user text-[12px]"></i>{a.author||'（未填作者）'}
-              </div>
-              {renderContent(a.content,'modern',a.imageUrl,a.imageSize,a.colSpan||1,a.imageWidth??null,a.id)}
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-
-    /* ── Preview: Newsletter ── */
-    const NewsletterPreview=()=>(
-      <div className="bg-slate-100 w-full min-h-[297mm] print:bg-white">
-        <div className="max-w-3xl mx-auto bg-white rounded-2xl shadow-lg overflow-hidden print:shadow-none print:rounded-none">
-          <div className="bg-gradient-to-br from-pink-500 via-rose-500 to-orange-400 p-16 text-center text-white">
-            <div className="inline-block bg-white/20 px-5 py-2 rounded-full text-xs font-bold tracking-[0.2em] mb-6" style={getTypoStyle('pubSubtitle')}>
-              🌸 母親節 × 戶外教育特刊 🌿　{pubSubtitle}
-            </div>
-            <h1 className="text-5xl md:text-6xl font-black leading-tight mb-4 tracking-tight" style={getTypoStyle('pubName')}>{pubName}</h1>
-            <div className="text-pink-100 text-base font-medium" style={getTypoStyle('pubDate')}>{pubDate}</div>
-          </div>
-          <div className="p-8 md:p-12 bg-slate-50 space-y-10 print:bg-white">
-            {articles.map(a=>(
-              <div key={a.id} className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100 print:border-b print:shadow-none print:rounded-none print:mb-10">
-                <h2 className="text-3xl font-bold text-slate-800 mb-3 leading-snug" style={getArtTitleStyle(a)}>{a.title||'（未填標題）'}</h2>
-                <div className="flex items-center gap-2 text-rose-500 text-sm font-semibold mb-6 pb-5 border-b-2 border-slate-100" style={getTypoStyle('artAuthor')}>
-                  <i className="fas fa-user-circle text-[18px]"></i>{a.author||'（未填作者）'}
-                </div>
-                <div className="text-slate-700 text-base leading-[2] tracking-wide" style={getTypoStyle('artContent')}>
-                  {renderContent(a.content,'newsletter',a.imageUrl,a.imageSize)}
-                </div>
-              </div>
-            ))}
-          </div>
-          <div className="py-10 bg-slate-800 text-center text-slate-400 text-sm">
-            <p className="font-bold text-slate-300 text-base tracking-widest">感謝您的閱讀 ❤️</p>
-            <p className="mt-2 text-xs opacity-60">由學生作品排版產生器發送</p>
-          </div>
-        </div>
-      </div>
-    );
-
-    /* ── Gallery Modal ── */
-    const GalleryModal=()=>{
-      const album=albums.find(a=>a.id===activeAlbum);
-      return(
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 print:hidden">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl h-[85vh] flex overflow-hidden flex-col md:flex-row relative">
-            <button onClick={closeGallery} className="absolute top-4 right-4 z-20 w-9 h-9 bg-white/90 rounded-full shadow hover:bg-gray-100 text-gray-600 flex items-center justify-center">
-              <i className="fas fa-times text-[18px]"></i>
-            </button>
-            {/* Album sidebar */}
-            <div className="w-full md:w-56 bg-gray-50 border-r border-gray-200 p-4 flex flex-col h-full shrink-0">
-              <h2 className="text-base font-bold text-gray-800 mb-4 flex items-center gap-2">
-                <i className="fas fa-folder text-indigo-500"></i> 相簿分類
-              </h2>
-              <div className="flex-1 overflow-y-auto space-y-1.5 pr-1">
-                {albums.map(alb=>(
-                  <div key={alb.id} onClick={()=>setActiveAlbum(alb.id)}
-                    className={`flex items-center justify-between p-2.5 rounded-lg cursor-pointer group transition-colors ${activeAlbum===alb.id?'bg-indigo-100 text-indigo-800 border border-indigo-200':'hover:bg-gray-200 text-gray-700 border border-transparent'}`}>
-                    {editAlbumId===alb.id?(
-                      <input autoFocus value={editAlbumName} onChange={e=>setEditAlbumName(e.target.value)}
-                        onBlur={()=>saveAlbumName(alb.id)} onKeyDown={e=>e.key==='Enter'&&saveAlbumName(alb.id)}
-                        className="w-full text-sm p-1 rounded outline-none ring-1 ring-indigo-300" onClick={e=>e.stopPropagation()}/>
-                    ):(
-                      <span className="truncate text-sm font-semibold flex-1" onDoubleClick={()=>{setEditAlbumId(alb.id);setEditAlbumName(alb.name);}}>
-                        {alb.name}
-                      </span>
-                    )}
-                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                      <button onClick={e=>{e.stopPropagation();setEditAlbumId(alb.id);setEditAlbumName(alb.name);}} className="p-1 hover:text-indigo-600 rounded"><i className="fas fa-pen text-[11px]"></i></button>
-                      {albums.length>1&&<button onClick={e=>{e.stopPropagation();deleteAlbum(alb.id);}} className="p-1 hover:text-red-600 rounded"><i className="fas fa-trash-alt text-[11px]"></i></button>}
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <button onClick={createAlbum} className="mt-3 w-full py-2 border-2 border-dashed border-gray-300 text-gray-600 rounded-lg hover:bg-gray-100 text-sm font-bold flex items-center justify-center gap-2 transition-colors">
-                <i className="fas fa-folder-plus text-[14px]"></i> 新增相簿
-              </button>
-            </div>
-            {/* Photo grid */}
-            <div className="flex-1 flex flex-col h-full bg-white">
-              <div className="p-4 border-b border-gray-100 flex justify-between items-center shrink-0">
-                <div>
-                  <h3 className="font-bold text-lg text-gray-800">{album?.name}</h3>
-                  <p className="text-xs text-gray-500 mt-0.5">{album?.images.length??0} 張相片</p>
-                </div>
-                <div className="flex items-center gap-3">
-                  {selectFor&&(<span className="bg-amber-100 text-amber-800 text-xs px-3 py-1.5 rounded-full font-bold border border-amber-200 flex items-center gap-1.5"><i className="fas fa-hand-pointer text-[12px]"></i> 請點選要設為配圖的相片</span>)}
-                  <label className="cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition-colors shadow-sm">
-                    <i className="fas fa-upload text-[14px]"></i> 上傳相片
-                    <input type="file" multiple accept="image/*" className="hidden" onChange={uploadToGallery} ref={galleryRef}/>
-                  </label>
-                </div>
-              </div>
-              <div className="flex-1 overflow-y-auto p-5 bg-slate-50/50">
-                {!album?.images.length?(
-                  <div className="h-full flex flex-col items-center justify-center text-gray-400 gap-3">
-                    <i className="fas fa-images text-[56px] opacity-20 text-indigo-400"></i>
-                    <p className="text-base font-semibold text-gray-600">此相簿還沒有相片</p>
-                    <p className="text-sm">請點右上角「上傳相片」</p>
-                  </div>
-                ):(
-                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-                    {album.images.map(img=>(
-                      <div key={img.id} className="relative group aspect-[4/3] rounded-xl overflow-hidden shadow-sm border border-gray-200 bg-white">
-                        <img src={img.url} className="w-full h-full object-cover cursor-pointer hover:scale-105 transition-transform duration-300" onClick={()=>selectFromGallery(img.url)} alt="相片"/>
-                        {!selectFor&&(<button onClick={()=>deleteGalleryImg(activeAlbum,img.id)} className="absolute top-2 right-2 p-1.5 bg-red-500/90 hover:bg-red-600 text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"><i className="fas fa-trash-alt text-[13px]"></i></button>)}
-                        {selectFor&&(<div onClick={()=>selectFromGallery(img.url)} className="absolute inset-0 bg-indigo-600/20 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer flex items-center justify-center"><div className="bg-indigo-600 text-white px-3 py-1.5 rounded-full text-sm font-bold shadow-lg flex items-center gap-1.5 transform translate-y-2 group-hover:translate-y-0 transition-all"><i className="fas fa-check text-[14px]"></i> 設為配圖</div></div>)}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      );
-    };
-
-    /* ════════════════════════════════════════
-       ── Main Render ──
-    ════════════════════════════════════════ */
-    return (
-      <div className="min-h-screen bg-gray-100 flex flex-col md:flex-row font-sans">
-        <style>{`
-          @media print {
-            @page { size: ${paperSize==='A3'?'A3 landscape':'390mm 270mm'}; margin: 2cm 0; }
-            .print-grid { padding-top: 0.3cm; padding-bottom: 0.3cm; }
-            /* 每個格子在列印時保留上下緩衝，避免緊貼頁面邊界 */
-            .art-wrapper { padding-top: 0.2cm; padding-bottom: 0.2cm; }
-          }
-        `}</style>
-
-        {/* ═══════════ LEFT PANEL ═══════════ */}
-        <div className="w-full md:w-[370px] lg:w-[400px] bg-white shadow-xl z-20 flex flex-col print:hidden h-screen overflow-y-auto shrink-0 relative panel-scroll">
-
-          {/* Toast */}
-          {toast&&(<div className="toast-anim fixed top-5 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-sm px-5 py-2.5 rounded-full shadow-2xl z-[99] whitespace-nowrap">{toast}</div>)}
-
-          {/* Header */}
-          <div className="p-5 bg-gradient-to-r from-rose-500 via-pink-500 to-orange-400 text-white shrink-0">
-            <h1 className="text-lg font-bold flex items-center gap-2"><i className="fas fa-newspaper text-[20px]"></i> 學生作品排版產生器</h1>
-            <p className="text-xs text-pink-100 mt-1 font-medium tracking-wide">🌸 母親節 × 戶外教育特刊</p>
-          </div>
-
-          <div className="p-5 flex-grow flex flex-col gap-5 overflow-y-auto panel-scroll">
-
-            {/* Theme picker */}
-            <div>
-              <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">排版風格</p>
-              <div className="space-y-2">
-                <button onClick={()=>setTheme('retro')} className={`w-full flex items-center gap-3 p-3 rounded-xl border-2 transition-all text-left ${theme==='retro'?'border-amber-600 bg-amber-50':'border-gray-200 hover:border-amber-300'}`}>
-                  <i className={`fas fa-newspaper text-[18px] ${theme==='retro'?'text-amber-600':'text-gray-400'}`}></i>
-                  <div><div className="font-bold text-sm">復古報紙</div><div className="text-xs text-gray-500">A3 橫式 · 泛黃多欄 · 文繞圖</div></div>
-                </button>
-                <button onClick={()=>setTheme('modern')} className={`w-full flex items-center gap-3 p-3 rounded-xl border-2 transition-all text-left ${theme==='modern'?'border-zinc-700 bg-zinc-50':'border-gray-200 hover:border-zinc-300'}`}>
-                  <i className={`fas fa-layer-group text-[18px] ${theme==='modern'?'text-zinc-700':'text-gray-400'}`}></i>
-                  <div><div className="font-bold text-sm">現代報紙</div><div className="text-xs text-gray-500">A3 橫式 · 黑白俐落</div></div>
-                </button>
-                <button onClick={()=>setTheme('newsletter')} className={`w-full flex items-center gap-3 p-3 rounded-xl border-2 transition-all text-left ${theme==='newsletter'?'border-rose-500 bg-rose-50':'border-gray-200 hover:border-rose-300'}`}>
-                  <i className={`fas fa-envelope-open-text text-[18px] ${theme==='newsletter'?'text-rose-500':'text-gray-400'}`}></i>
-                  <div><div className="font-bold text-sm">電子報</div><div className="text-xs text-gray-500">直式 · 彩色漸層 · 大圖焦點</div></div>
-                </button>
-              </div>
-              {theme!=='newsletter'&&(
-                <div className="mt-5">
-                  <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">紙張尺寸</p>
-                  <div className="flex gap-2">
-                    <button onClick={()=>setPaperSize('A3')} className={`flex-1 py-2 text-sm font-bold rounded-xl border-2 transition-colors ${paperSize==='A3'?'bg-indigo-50 border-indigo-500 text-indigo-700':'bg-white border-gray-200 text-gray-500 hover:border-indigo-300'}`}>A3 <span className="text-[10px] font-normal block text-gray-500 mt-0.5">42 × 29.7 cm</span></button>
-                    <button onClick={()=>setPaperSize('8K')} className={`flex-1 py-2 text-sm font-bold rounded-xl border-2 transition-colors ${paperSize==='8K'?'bg-indigo-50 border-indigo-500 text-indigo-700':'bg-white border-gray-200 text-gray-500 hover:border-indigo-300'}`}>8K (8開) <span className="text-[10px] font-normal block text-gray-500 mt-0.5">39 × 27 cm</span></button>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <hr className="border-gray-100"/>
-
-            {/* Publication Settings */}
-            <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 space-y-3">
-              <p className="text-xs font-bold text-blue-800 flex items-center gap-1.5"><i className="fas fa-book-open text-[13px]"></i> 刊物設定</p>
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-xs font-semibold text-blue-700 mb-1">刊物名稱</label>
-                  <input value={pubName} onChange={e=>setPubName(e.target.value)} className="w-full p-2 text-sm border border-blue-200 rounded-lg outline-none bg-white focus:ring-2 focus:ring-blue-400"/>
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-blue-700 mb-1">英文副標</label>
-                  <input value={pubSubtitle} onChange={e=>setPubSubtitle(e.target.value)} className="w-full p-2 text-sm border border-blue-200 rounded-lg outline-none bg-white focus:ring-2 focus:ring-blue-400"/>
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-blue-700 mb-1">發行日期</label>
-                <input value={pubDate} onChange={e=>setPubDate(e.target.value)} className="w-full p-2 text-sm border border-blue-200 rounded-lg outline-none bg-white focus:ring-2 focus:ring-blue-400"/>
-              </div>
-            </div>
-
-            {/* Typography */}
-            <div className="bg-gray-50 rounded-xl border border-gray-200">
-              <button onClick={()=>setShowTypo(!showTypo)} className="w-full flex justify-between items-center p-3.5 font-semibold text-gray-600 hover:text-blue-600 transition-colors text-sm">
-                <span className="flex items-center gap-2"><i className="fas fa-font text-[14px]"></i> 字型進階設定</span>
-                <i className={`fas ${showTypo?'fa-chevron-up':'fa-chevron-down'} text-[13px]`}></i>
-              </button>
-              {showTypo&&(
-                <div className="px-4 pb-4 space-y-3 border-t border-gray-200">
-                  {[
-                    {label:'刊物名稱',key:'pubName'},{label:'英文副標',key:'pubSubtitle'},
-                    {label:'發行日期',key:'pubDate'},{label:'作品作者',key:'artAuthor'},{label:'作品內文',key:'artContent'}
-                  ].map(item=>(
-                    <div key={item.key} className="flex items-center gap-2 mt-3">
-                      <label className="text-xs font-semibold text-gray-600 w-16 shrink-0">{item.label}</label>
-                      <select className="flex-1 p-1.5 text-xs border border-gray-300 rounded outline-none focus:border-blue-400"
-                        value={typo[item.key].font} onChange={e=>setTypo(p=>({...p,[item.key]:{...p[item.key],font:e.target.value}}))}>
-                        {fontOpts.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}
-                      </select>
-                      <div className="flex items-center gap-1 w-20 shrink-0">
-                        <input type="number" placeholder="預設" className="w-full p-1.5 text-xs border border-gray-300 rounded outline-none focus:border-blue-400"
-                          value={typo[item.key].size} onChange={e=>setTypo(p=>({...p,[item.key]:{...p[item.key],size:e.target.value}}))}/>
-                        <span className="text-xs text-gray-400">px</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* ════ ARTICLES SECTION ════ */}
-            <div>
-              <div className="flex justify-between items-center mb-3">
-                <p className="text-sm font-bold text-gray-700">學生作品</p>
-                <span className="text-xs font-semibold text-pink-600 bg-pink-100 px-2.5 py-1 rounded-full">{articles.length} 篇</span>
-              </div>
-
-              {/* ★ Student Quick-Nav (NEW) */}
-              <QuickNav/>
-
-              <div className="space-y-4 mt-4">
-                {articles.map((art, idx) => (
-                  /* ★ ref attached here for quick-nav scrolling */
-                  <div key={art.id} ref={el => articleRefs.current[art.id] = el}
-                    className="p-4 bg-white border border-gray-200 rounded-2xl shadow-sm group hover:border-pink-300 transition-all flex flex-col gap-3.5 scroll-mt-4">
-
-                    {/* Article header */}
-                    <div className="flex items-center justify-between border-b border-gray-100 pb-2">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-bold text-gray-400">作品 #{idx + 1}</span>
-                        {art.author && (
-                          <span className="text-xs font-bold text-rose-500 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-200">
-                            {art.author}
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {/* colSpan selector */}
-                        <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1">
-                          <i className="fas fa-table-columns text-[10px] text-slate-400"></i>
-                          <span className="text-[10px] text-slate-500 font-semibold mr-0.5">佔欄</span>
-                          {[1,2,3,4].map(n=>(
-                            <button key={n} onClick={()=>updateArticle(art.id,'colSpan',n)}
-                              className={`w-5 h-5 text-[10px] font-black rounded transition-colors ${(art.colSpan||1)===n?'bg-indigo-500 text-white':'text-slate-400 hover:bg-slate-200'}`}>
-                              {n}
-                            </button>
-                          ))}
-                        </div>
-                        <button onClick={()=>removeArticle(art.id)} className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg opacity-0 group-hover:opacity-100 transition-all" title="刪除">
-                          <i className="fas fa-trash-alt text-[13px]"></i>
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Title + Mic */}
-                    <div>
-                      <div className="flex items-center justify-between mb-1.5">
-                        <label className="text-xs font-semibold text-gray-600 flex items-center gap-1"><i className="fas fa-heading text-[11px]"></i> 標題</label>
-                        <div className="flex items-center gap-1">
-                          <select className="p-1 text-[10px] border border-gray-300 rounded outline-none bg-gray-50" value={art.titleTypo?.font||''} onChange={e=>updateTitleTypo(art.id,'font',e.target.value)}>
-                            {fontOpts.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}
-                          </select>
-                          <input type="number" placeholder="大小" className="w-11 p-1 text-[10px] border border-gray-300 rounded outline-none bg-gray-50" value={art.titleTypo?.size||''} onChange={e=>updateTitleTypo(art.id,'size',e.target.value)}/>
-                        </div>
-                      </div>
-                      <div className="flex gap-2">
-                        <input value={art.title} onChange={e=>updateArticle(art.id,'title',e.target.value)} className="flex-1 p-2 text-sm border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-pink-300" placeholder="輸入標題，或按麥克風語音輸入…"/>
-                        <MicBtn artId={art.id} field="title"/>
-                      </div>
-                    </div>
-
-                    {/* Author Dropdown */}
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-600 mb-1.5 flex items-center gap-1"><i className="fas fa-user text-[11px]"></i> 作者</label>
-                      <select value={art.author} onChange={e=>updateArticle(art.id,'author',e.target.value)}
-                        className="w-full p-2 text-sm border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-pink-300 bg-white">
-                        <option value="">— 請選擇作者 —</option>
-                        {AUTHORS.map(name=><option key={name} value={name}>{name}</option>)}
-                      </select>
-                    </div>
-
-                    {/* Content + Mic + Scaffold */}
-                    <div>
-                      <div className="flex items-center justify-between mb-1.5">
-                        <label className="text-xs font-semibold text-gray-600 flex items-center gap-1"><i className="fas fa-align-left text-[11px]"></i> 內文</label>
-                        <div className="flex items-center gap-1.5">
-                          <MicBtn artId={art.id} field="content"/>
-                          <button onClick={()=>toggleScaffold(art.id)}
-                            className={`px-2.5 py-1.5 text-[11px] font-bold rounded-lg flex items-center gap-1 transition-colors border ${scaffoldOpen[art.id]?'bg-green-600 text-white border-green-700':'bg-green-50 text-green-700 border-green-200 hover:bg-green-100'}`}>
-                            <i className="fas fa-seedling text-[11px]"></i> 鷹架協助
-                          </button>
-                        </div>
-                      </div>
-                      <textarea value={art.content} onChange={e=>updateArticle(art.id,'content',e.target.value)} rows={4}
-                        className="w-full p-2.5 text-sm border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-pink-300 resize-y leading-relaxed"
-                        placeholder="點「鷹架協助」選句子，或按麥克風🎙️用說的…"/>
-                      {scaffoldOpen[art.id]&&(
-                        <div className="mt-2 p-3.5 bg-green-50 border border-green-200 rounded-xl">
-                          <div className="flex gap-2 mb-3">
-                            {Object.entries(SCAFFOLDS).map(([key,val])=>(
-                              <button key={key} onClick={()=>setScaffoldTab(p=>({...p,[art.id]:key}))}
-                                className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-colors ${(scaffoldTab[art.id]||'motherday')===key?'bg-green-600 text-white shadow-sm':'bg-white text-green-700 border border-green-200 hover:bg-green-100'}`}>
-                                {val.label}
-                              </button>
-                            ))}
-                          </div>
-                          <p className="text-[11px] text-green-800 font-semibold mb-2.5 flex items-center gap-1">
-                            <i className="fas fa-hand-point-down text-[11px]"></i> 點一下句子加到內文，再把「___」換成你的答案
-                          </p>
-                          <div className="flex flex-wrap gap-2">
-                            {SCAFFOLDS[scaffoldTab[art.id]||'motherday'].prompts.map((prompt,i)=>(
-                              <button key={i} onClick={()=>addScaffold(art.id,prompt)}
-                                className="px-3 py-1.5 bg-white border border-green-300 text-green-800 rounded-lg text-xs font-medium hover:bg-green-600 hover:text-white hover:border-green-600 transition-all shadow-sm">
-                                {prompt}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Photo */}
-                    <div className="pt-3 border-t border-gray-100 space-y-2.5">
-                      <label className="block text-xs font-semibold text-gray-600 flex items-center gap-1"><i className="fas fa-image text-[11px]"></i> 配圖</label>
-                      <div className="flex items-center gap-3">
-                        {art.imageUrl?(
-                          <div className="relative group/img w-16 h-16 rounded-xl overflow-hidden border border-gray-200 shadow-sm shrink-0">
-                            <img src={art.imageUrl} className="w-full h-full object-cover" alt="配圖" onError={e=>e.target.style.display='none'}/>
-                            <button onClick={()=>updateArticle(art.id,'imageUrl','')} className="absolute inset-0 bg-black/60 text-white flex items-center justify-center opacity-0 group-hover/img:opacity-100 transition-opacity rounded-xl">
-                              <i className="fas fa-times-circle text-[20px]"></i>
-                            </button>
-                          </div>
-                        ):(
-                          <div className="w-16 h-16 rounded-xl border-2 border-dashed border-gray-200 bg-gray-50 flex items-center justify-center text-gray-300 shrink-0">
-                            <i className="fas fa-image text-[22px]"></i>
-                          </div>
-                        )}
-                        <div className="flex flex-col gap-1.5 flex-1 min-w-0">
-                          <label className="cursor-pointer flex items-center justify-center gap-2 px-3 py-2 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 transition-colors shadow-sm">
-                            <i className="fas fa-upload text-[12px]"></i> 直接上傳照片到報紙
-                            <input type="file" accept="image/*" className="hidden" onChange={e=>directUpload(art.id,e)}/>
-                          </label>
-                          <button onClick={()=>openGalleryFor(art.id)} className="flex items-center justify-center gap-1.5 px-3 py-1.5 bg-white text-gray-600 rounded-lg text-xs font-semibold hover:bg-gray-100 transition-colors border border-gray-200">
-                            <i className="fas fa-images text-[12px]"></i> 從相片集選擇
-                          </button>
-                        </div>
-                      </div>
-                      {art.imageUrl&&(
-                        <div className="space-y-2">
-                          <div className="flex items-center gap-2 bg-gray-50 p-2 rounded-lg border border-gray-200">
-                            <span className="text-xs font-semibold text-gray-600 shrink-0">照片大小：</span>
-                            <div className="flex gap-1 flex-1">
-                              {[['small','小',60],['medium','中',80],['large','大',100]].map(([v,l,pct])=>(
-                                <button key={v} onClick={()=>{updateArticle(art.id,'imageSize',v); updateArticle(art.id,'imageWidth',pct);}}
-                                  className={`flex-1 text-xs py-1 rounded-lg transition-colors border font-semibold ${(art.imageWidth??{small:60,medium:80,large:100}[art.imageSize]??80)===pct?'bg-indigo-600 text-white border-indigo-700':'bg-white text-gray-600 border-gray-300 hover:bg-gray-100'}`}>
-                                  {l}圖
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2 bg-gray-50 p-2 rounded-lg border border-gray-200">
-                            <i className="fas fa-left-right text-[11px] text-gray-400 shrink-0"></i>
-                            <span className="text-xs font-semibold text-gray-600 shrink-0">寬度</span>
-                            <input type="range" min="20" max="100" step="5"
-                              value={art.imageWidth ?? {small:60,medium:80,large:100}[art.imageSize] ?? 80}
-                              onChange={e=>updateArticle(art.id,'imageWidth',Number(e.target.value))}
-                              className="flex-1 accent-indigo-600"/>
-                            <span className="text-xs font-mono text-indigo-600 font-bold w-9 text-right shrink-0">
-                              {art.imageWidth ?? {small:60,medium:80,large:100}[art.imageSize] ?? 80}%
-                            </span>
-                          </div>
-                          <p className="text-[10px] text-gray-400 flex items-center gap-1">
-                            <i className="fas fa-hand-point-up text-[10px]"></i>
-                            也可以在預覽圖片右側拖曳藍色把手等比例縮放
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <button onClick={addArticle} className="mt-4 w-full flex items-center justify-center gap-2 py-3 border-2 border-dashed border-pink-300 text-pink-600 rounded-xl hover:bg-pink-50 font-bold text-sm transition-colors bg-white">
-                <i className="fas fa-plus text-[15px]"></i> 新增一篇作品
-              </button>
-            </div>
-
-            {/* Gallery shortcut */}
-            <div className="bg-indigo-50 p-3 rounded-xl border border-indigo-100">
-              <div className="flex justify-between items-center">
-                <span className="text-xs font-bold text-indigo-800 flex items-center gap-1.5"><i className="fas fa-folder text-[13px]"></i> 班級相片集管理</span>
-                <button onClick={()=>{setSelectFor(null);setGalleryOpen(true);}} className="text-xs bg-indigo-600 text-white px-3 py-1.5 rounded-lg hover:bg-indigo-700 transition-colors flex items-center gap-1 shadow-sm font-semibold">
-                  <i className="fas fa-images text-[12px]"></i> 管理相片
-                </button>
-              </div>
-            </div>
-
-          </div>
-
-          {/* Bottom bar */}
-          <div className="p-4 bg-gray-50 border-t border-gray-100 shrink-0 flex flex-col gap-2.5">
-            <input type="file" accept=".json" className="hidden" ref={jsonInputRef} onChange={loadDraftFile}/>
-            <p className="text-[11px] text-gray-400 text-center leading-snug">
-              💡 <span className="font-semibold text-gray-500">換電腦</span>請用「匯出」帶走 .json，到新電腦「載入檔案」即可還原
-            </p>
-            <div className="flex gap-2">
-              <button onClick={saveDraft} className="flex-1 flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 rounded-lg text-sm transition-colors shadow-sm">
-                <i className="fas fa-file-export text-[13px]"></i> 匯出進度
-              </button>
-              <button onClick={()=>jsonInputRef.current?.click()} className="flex-1 flex items-center justify-center gap-1.5 bg-white border-2 border-emerald-400 text-emerald-700 hover:bg-emerald-50 font-bold py-2.5 rounded-lg text-sm transition-colors">
-                <i className="fas fa-file-import text-[13px]"></i> 載入檔案
-              </button>
-            </div>
-            <button onClick={loadDraftLocal} className="w-full flex items-center justify-center gap-1.5 bg-white border border-gray-300 hover:bg-gray-50 text-gray-600 font-semibold py-2 rounded-lg text-xs transition-colors">
-              <i className="fas fa-desktop text-[12px]"></i> 讀取此電腦的暫存
-            </button>
-            <button onClick={()=>window.print()} className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-rose-500 to-orange-400 hover:from-rose-600 hover:to-orange-500 text-white font-bold py-3 rounded-xl transition-all shadow-md">
-              <i className="fas fa-print text-[18px]"></i> 列印 / 匯出 PDF
-            </button>
-          </div>
-
-        </div>
-
-        {/* ═══════════ RIGHT PREVIEW ═══════════ */}
-        <div className="w-full flex-1 p-4 md:p-8 overflow-y-auto bg-slate-200 print:bg-transparent print:w-full print:p-0 print:overflow-visible">
-          <div className="mx-auto drop-shadow-2xl print:drop-shadow-none print:w-full flex justify-center transition-all">
-            {theme==='retro'      && <RetroPreview/>}
-            {theme==='modern'     && <ModernPreview/>}
-            {theme==='newsletter' && <NewsletterPreview/>}
-          </div>
-        </div>
-
-        {galleryOpen && <GalleryModal/>}
-      </div>
-    );
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>A3 學生報紙排版系統</title>
+
+<script src="https://cdn.tailwindcss.com"></script>
+
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+<style>
+  body{
+    margin:0;
+    background:#e5e7eb;
+    font-family:system-ui;
   }
 
-  ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+  @media print{
+    body{
+      background:white;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    .no-print{
+      display:none !important;
+    }
+
+    @page{
+      size:A3 landscape;
+      margin:0;
+    }
+  }
+
+  .paper{
+    width:420mm;
+    min-height:297mm;
+    background:#f5ecd7;
+    margin:auto;
+    box-shadow:0 10px 40px rgba(0,0,0,0.15);
+
+    /* ★ 固定上下2cm */
+    padding-top:2cm;
+    padding-bottom:2cm;
+    padding-left:1.5cm;
+    padding-right:1.5cm;
+  }
+
+  .news-grid{
+    display:grid;
+
+    /* ★ 改成6欄 */
+    grid-template-columns:repeat(6,1fr);
+
+    /* ★ 真正像報紙的間距 */
+    gap:1rem;
+
+    align-items:start;
+  }
+
+  .article{
+    background:rgba(255,255,255,0.45);
+    border:2px solid #4b5563;
+    padding:14px;
+    break-inside:avoid;
+    page-break-inside:avoid;
+    position:relative;
+  }
+
+  .article img{
+    width:100%;
+    height:auto;
+    object-fit:cover;
+    border:2px solid #444;
+    margin-bottom:10px;
+  }
+
+  .dragging{
+    opacity:0.4;
+  }
+
+  .toolbar{
+    width:360px;
+    background:white;
+    height:100vh;
+    overflow:auto;
+    border-right:1px solid #ddd;
+  }
+
+  .resize-btn{
+    width:32px;
+    height:32px;
+    border-radius:8px;
+    border:none;
+    cursor:pointer;
+    font-weight:bold;
+  }
+
+</style>
+</head>
+
+<body>
+
+<div id="root"></div>
+
+<script type="text/babel">
+
+const {useState} = React;
+
+const defaultArticles = [
+{
+  id:1,
+  title:'媽媽謝謝您',
+  author:'小安',
+  content:'媽媽每天幫我準備早餐。\n我最喜歡媽媽的笑容。',
+  image:'https://picsum.photos/600/400?1',
+
+  /* 小圖=1格 */
+  imageSize:'small',
+  colSpan:1
+},
+
+{
+  id:2,
+  title:'戶外教育真有趣',
+  author:'小熙',
+  content:'我們去了科學博物館。\n我看到恐龍骨骼。',
+  image:'https://picsum.photos/600/400?2',
+
+  /* 中圖=2格 */
+  imageSize:'medium',
+  colSpan:2
+},
+
+{
+  id:3,
+  title:'我的媽媽',
+  author:'小晴',
+  content:'媽媽很溫柔。\n我愛媽媽。',
+  image:'https://picsum.photos/600/400?3',
+
+  /* 大圖=3格 */
+  imageSize:'large',
+  colSpan:3
+}
+];
+
+function App(){
+
+  const [articles,setArticles] = useState(defaultArticles);
+
+  /* =========================
+     改變圖片大小 → 自動改欄位
+  ========================= */
+
+  const changeImageSize = (id,size)=>{
+
+    const map = {
+      small:{span:1},
+      medium:{span:2},
+      large:{span:3}
+    };
+
+    setArticles(prev =>
+      prev.map(a => {
+
+        if(a.id !== id) return a;
+
+        return {
+          ...a,
+          imageSize:size,
+          colSpan:map[size].span
+        };
+
+      })
+    );
+  };
+
+  /* =========================
+     更新文章
+  ========================= */
+
+  const updateArticle = (id,key,value)=>{
+
+    setArticles(prev =>
+      prev.map(a =>
+        a.id===id
+          ? {...a,[key]:value}
+          : a
+      )
+    );
+  };
+
+  /* =========================
+     新增文章
+  ========================= */
+
+  const addArticle = ()=>{
+
+    setArticles(prev => [
+      ...prev,
+      {
+        id:Date.now(),
+        title:'新文章',
+        author:'作者',
+        content:'請輸入內容',
+        image:'https://picsum.photos/600/400?' + Math.random(),
+
+        /* 預設中型 */
+        imageSize:'medium',
+        colSpan:2
+      }
+    ]);
+  };
+
+  /* =========================
+     刪除
+  ========================= */
+
+  const deleteArticle = (id)=>{
+    setArticles(prev => prev.filter(a=>a.id!==id));
+  };
+
+  return (
+
+  <div className="flex">
+
+    {/* 左側控制 */}
+    <div className="toolbar no-print p-5">
+
+      <div className="flex justify-between items-center mb-5">
+        <h1 className="font-bold text-xl">
+          報紙排版
+        </h1>
+
+        <button
+          onClick={addArticle}
+          className="bg-indigo-600 text-white px-4 py-2 rounded-xl"
+        >
+          新增
+        </button>
+      </div>
+
+      <div className="space-y-5">
+
+        {articles.map(article => (
+
+          <div
+            key={article.id}
+            className="border rounded-2xl p-4 bg-gray-50"
+          >
+
+            <input
+              value={article.title}
+              onChange={e=>updateArticle(article.id,'title',e.target.value)}
+              className="w-full border p-2 rounded-lg mb-2"
+            />
+
+            <input
+              value={article.author}
+              onChange={e=>updateArticle(article.id,'author',e.target.value)}
+              className="w-full border p-2 rounded-lg mb-2"
+            />
+
+            <textarea
+              rows="4"
+              value={article.content}
+              onChange={e=>updateArticle(article.id,'content',e.target.value)}
+              className="w-full border p-2 rounded-lg mb-3"
+            />
+
+            {/* 圖片大小 */}
+            <div className="flex gap-2 mb-3">
+
+              <button
+                className={`resize-btn ${
+                  article.imageSize==='small'
+                  ? 'bg-indigo-600 text-white'
+                  : 'bg-gray-200'
+                }`}
+                onClick={()=>changeImageSize(article.id,'small')}
+              >
+                小
+              </button>
+
+              <button
+                className={`resize-btn ${
+                  article.imageSize==='medium'
+                  ? 'bg-indigo-600 text-white'
+                  : 'bg-gray-200'
+                }`}
+                onClick={()=>changeImageSize(article.id,'medium')}
+              >
+                中
+              </button>
+
+              <button
+                className={`resize-btn ${
+                  article.imageSize==='large'
+                  ? 'bg-indigo-600 text-white'
+                  : 'bg-gray-200'
+                }`}
+                onClick={()=>changeImageSize(article.id,'large')}
+              >
+                大
+              </button>
+
+            </div>
+
+            {/* 手動欄寬 */}
+            <div className="mb-3">
+
+              <div className="text-xs mb-1 text-gray-500">
+                手動調整欄數
+              </div>
+
+              <div className="flex gap-1">
+
+                {[1,2,3,4,5,6].map(n => (
+
+                  <button
+                    key={n}
+                    onClick={()=>updateArticle(article.id,'colSpan',n)}
+                    className={`w-8 h-8 rounded-lg text-sm font-bold ${
+                      article.colSpan===n
+                      ? 'bg-rose-500 text-white'
+                      : 'bg-gray-200'
+                    }`}
+                  >
+                    {n}
+                  </button>
+
+                ))}
+
+              </div>
+
+            </div>
+
+            <button
+              onClick={()=>deleteArticle(article.id)}
+              className="bg-red-500 text-white px-3 py-2 rounded-lg w-full"
+            >
+              刪除文章
+            </button>
+
+          </div>
+
+        ))}
+
+      </div>
+
+      <button
+        onClick={()=>window.print()}
+        className="w-full mt-5 bg-green-600 text-white py-3 rounded-2xl font-bold"
+      >
+        列印 / PDF
+      </button>
+
+    </div>
+
+    {/* 右側報紙 */}
+    <div className="flex-1 overflow-auto p-8">
+
+      <div className="paper">
+
+        {/* 標題 */}
+        <div className="border-b-[6px] border-double border-black pb-5 mb-8">
+
+          <div className="text-center">
+
+            <div className="tracking-[0.5em] text-gray-600 mb-3">
+              CLASS TIMES
+            </div>
+
+            <h1 className="text-7xl font-black tracking-widest mb-5">
+              六年甲班小報
+            </h1>
+
+            <div className="border-y-2 border-black py-2 flex justify-between text-sm font-bold">
+              <span>🌸 母親節 × 戶外教育特刊 🌿</span>
+              <span>2026年5月</span>
+            </div>
+
+          </div>
+
+        </div>
+
+        {/* 報紙內容 */}
+        <div className="news-grid">
+
+          {articles.map(article => (
+
+            <div
+              key={article.id}
+              className="article"
+              style={{
+                gridColumn:`span ${article.colSpan}`
+              }}
+            >
+
+              <h2 className="text-3xl font-black mb-2 leading-tight">
+                {article.title}
+              </h2>
+
+              <div className="text-sm font-bold text-gray-500 mb-4">
+                撰文 / {article.author}
+              </div>
+
+              <img src={article.image} />
+
+              <div className="leading-relaxed whitespace-pre-line text-[15px]">
+                {article.content}
+              </div>
+
+            </div>
+
+          ))}
+
+        </div>
+
+      </div>
+
+    </div>
+
+  </div>
+
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+
 </script>
+
 </body>
 </html>
