@@ -9,9 +9,10 @@
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  
   <style>
     @media print {
-      body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      body { -webkit-print-color-adjust: exact; print-color-adjust: exact; zoom: 1 !important; }
     }
     body { font-family: ui-sans-serif, system-ui, sans-serif; }
     /* ── Page-break fix: inline-block forces column-break avoidance in all browsers ── */
@@ -127,6 +128,7 @@
     const [pubDate, setPubDate]         = useState('2026年5月11日');
     const [theme, setTheme]             = useState('retro');
     const [paperSize, setPaperSize]     = useState('A3');
+    const [zoom, setZoom]               = useState(0.65); // 新增預覽縮放比例
 
     const [typo, setTypo] = useState({
       pubName:    { font: '', size: '' }, pubSubtitle:{ font: '', size: '' },
@@ -345,7 +347,7 @@
 
       if(th==='retro'||th==='modern'){
         /* 等比例縮放：控制寬度百分比，高度 auto 自動跟著比例 */
-        const presetW = {small: 60, medium: 80, large: 100};
+        const presetW = {small: 60, medium: 80}; /* 移除了 large */
         const w = imageWidth ?? presetW[imgSize] ?? 80;
         const border = th==='retro'
           ? 'border-[4px] border-double border-stone-800 p-0.5 shadow-sm'
@@ -394,7 +396,7 @@
         );
       }
       if(th==='newsletter'){
-        const cls=imgSize==='small'?'w-1/2 rounded-lg mx-auto block object-cover shadow-md mb-6':imgSize==='large'?'w-full rounded-2xl object-cover shadow-md mb-6 h-64':'w-3/4 rounded-xl mx-auto block object-cover shadow-md mb-6';
+        const cls=imgSize==='small'?'w-1/2 rounded-lg mx-auto block object-cover shadow-md mb-6':'w-3/4 rounded-xl mx-auto block object-cover shadow-md mb-6';
         return <React.Fragment><img src={imgUrl} alt="配圖" className={cls} onError={e=>e.target.style.display='none'}/>{rendered}</React.Fragment>;
       }
       return <div>{rendered}</div>;
@@ -469,25 +471,28 @@
     };
 
     /* ── Preview: Retro ── */
-    const RetroPreview=()=>(
-      <div className={`bg-[#f4ebd8] text-stone-900 font-serif p-8 md:p-12 border border-stone-300 w-full shadow-xl print:shadow-none print:border-none relative ${paperSize==='A3'?'max-w-[420mm] min-h-[297mm]':'max-w-[390mm] min-h-[270mm]'}`}>
+    const RetroPreview=()=>{
+      const printH = paperSize === 'A3' ? '257mm' : '230mm'; /* 扣除上下各2cm邊界後的高度 */
+      return (
+      <div className={`wysiwyg-paper bg-[#f4ebd8] text-stone-900 font-serif border border-stone-300 mx-auto shadow-xl print:shadow-none print:border-none relative`}
+           style={{
+             width: paperSize === 'A3' ? '420mm' : '390mm',
+             minHeight: paperSize === 'A3' ? '297mm' : '270mm',
+             padding: '2cm',
+             boxSizing: 'border-box'
+           }}>
 
-        {/* ── 每頁重複顯示的小標題（只在列印時出現） ── */}
-        <div className="page-running-header hidden bg-[#f4ebd8] font-serif border-b-[4px] border-double border-stone-800 px-12 py-2"
-          style={{backgroundImage:'none'}}>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <span className="text-xl font-black tracking-widest text-stone-900" style={getTypoStyle('pubName')}>{pubName}</span>
-              {pubSubtitle && <span className="text-xs tracking-[0.3em] font-bold text-stone-500">【 {pubSubtitle} 】</span>}
-            </div>
-            <div className="flex gap-6 text-xs font-bold text-stone-600 tracking-wide">
-              <span>🌸 母親節特刊 × 戶外教育 🌿</span>
-              <span style={getTypoStyle('pubDate')}>{pubDate}</span>
-            </div>
-          </div>
+        {/* ── 分頁參考線 (只在螢幕上顯示) ── */}
+        <div className="print:hidden absolute pointer-events-none z-0"
+             style={{
+                 top: '2cm', bottom: '2cm', left: '2cm', right: '2cm',
+                 backgroundSize: `100% ${printH}`,
+                 backgroundImage: `linear-gradient(to bottom, transparent calc(100% - 2px), rgba(239, 68, 68, 0.45) calc(100% - 2px), rgba(239, 68, 68, 0.45) 100%)`
+             }}>
         </div>
 
-        <div className="absolute left-1/2 top-0 bottom-0 border-l-2 border-dashed border-stone-400/30 print:hidden pointer-events-none transform -translate-x-1/2 z-0"></div>
+        <div className="absolute left-1/2 top-[2cm] bottom-[2cm] border-l-2 border-dashed border-stone-400/30 print:hidden pointer-events-none transform -translate-x-1/2 z-0"></div>
+        
         <div className="text-left border-b-[6px] border-double border-stone-800 pb-6 mb-8 relative z-10 w-full">
           {pubSubtitle&&<div className="text-lg tracking-[0.4em] font-bold text-stone-600 mb-3" style={getTypoStyle('pubSubtitle')}>【 {pubSubtitle} 】</div>}
           <h1 className="text-6xl md:text-8xl font-black mb-6 text-stone-900 tracking-widest" style={getTypoStyle('pubName')}>{pubName}</h1>
@@ -533,27 +538,32 @@
           ))}
         </div>
       </div>
-    );
+      );
+    };
 
     /* ── Preview: Modern ── */
-    const ModernPreview=()=>(
-      <div className={`bg-white text-zinc-900 font-sans p-8 md:p-12 w-full shadow-xl print:shadow-none relative ${paperSize==='A3'?'max-w-[420mm] min-h-[297mm]':'max-w-[390mm] min-h-[270mm]'}`}>
+    const ModernPreview=()=>{
+      const printH = paperSize === 'A3' ? '257mm' : '230mm';
+      return (
+      <div className={`wysiwyg-paper bg-white text-zinc-900 font-sans mx-auto shadow-xl print:shadow-none relative`}
+           style={{
+             width: paperSize === 'A3' ? '420mm' : '390mm',
+             minHeight: paperSize === 'A3' ? '297mm' : '270mm',
+             padding: '2cm',
+             boxSizing: 'border-box'
+           }}>
 
-        {/* ── 每頁重複顯示的小標題（只在列印時出現） ── */}
-        <div className="page-running-header hidden bg-white font-sans border-b-[3px] border-zinc-900 px-12 py-2">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <span className="text-lg font-black tracking-tighter text-zinc-900" style={getTypoStyle('pubName')}>{pubName}</span>
-              {pubSubtitle && <span className="text-xs font-black text-zinc-400 uppercase tracking-[0.3em]">{pubSubtitle}</span>}
-            </div>
-            <div className="flex gap-4 text-xs font-bold text-zinc-500 uppercase tracking-widest">
-              <span>🌸 母親節 × 戶外教育特刊 🌿</span>
-              <span style={getTypoStyle('pubDate')}>{pubDate}</span>
-            </div>
-          </div>
+        {/* ── 分頁參考線 (只在螢幕上顯示) ── */}
+        <div className="print:hidden absolute pointer-events-none z-0"
+             style={{
+                 top: '2cm', bottom: '2cm', left: '2cm', right: '2cm',
+                 backgroundSize: `100% ${printH}`,
+                 backgroundImage: `linear-gradient(to bottom, transparent calc(100% - 2px), rgba(239, 68, 68, 0.45) calc(100% - 2px), rgba(239, 68, 68, 0.45) 100%)`
+             }}>
         </div>
 
-        <div className="absolute left-1/2 top-0 bottom-0 border-l-2 border-dashed border-zinc-200 print:hidden pointer-events-none transform -translate-x-1/2 z-0"></div>
+        <div className="absolute left-1/2 top-[2cm] bottom-[2cm] border-l-2 border-dashed border-zinc-200 print:hidden pointer-events-none transform -translate-x-1/2 z-0"></div>
+        
         <div className="text-left border-b-[8px] border-zinc-900 pb-5 mb-10 relative z-10">
           <div className="text-sm font-black text-zinc-500 uppercase tracking-[0.3em] mb-2" style={getTypoStyle('pubSubtitle')}>{pubSubtitle}</div>
           <h1 className="text-7xl md:text-9xl font-black tracking-tighter leading-none mb-6" style={getTypoStyle('pubName')}>{pubName}</h1>
@@ -601,7 +611,8 @@
           ))}
         </div>
       </div>
-    );
+      );
+    };
 
     /* ── Preview: Newsletter ── */
     const NewsletterPreview=()=>(
@@ -720,15 +731,17 @@
       <div className="min-h-screen bg-gray-100 flex flex-col md:flex-row font-sans">
         <style>{`
           @media print {
-            @page { size: ${paperSize==='A3'?'A3 landscape':'390mm 270mm'}; margin: 2cm 0; }
-            .print-grid { padding-top: 0.3cm; padding-bottom: 0.3cm; }
+            @page { size: ${paperSize==='A3'?'A3 landscape':'390mm 270mm'}; margin: 2cm; }
+            .print-grid { padding-top: 0 !important; padding-bottom: 0 !important; }
             .art-wrapper { padding-top: 0.2cm; padding-bottom: 0.2cm; }
-            /* 固定在每頁頂端的小標題 */
-            .page-running-header {
-              display: block !important;
-              position: fixed;
-              top: 0; left: 0; right: 0;
-              z-index: 9999;
+            /* 取消螢幕上的紙張邊界與陰影，全權交給 @page 處理 margin */
+            .wysiwyg-paper {
+              width: 100% !important;
+              min-height: auto !important;
+              padding: 0 !important;
+              margin: 0 !important;
+              box-shadow: none !important;
+              background: transparent !important;
             }
           }
         `}</style>
@@ -747,6 +760,7 @@
 
           <div className="p-5 flex-grow flex flex-col gap-5 overflow-y-auto panel-scroll">
 
+            {}
             {/* Theme picker */}
             <div>
               <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">排版風格</p>
@@ -773,6 +787,18 @@
                   </div>
                 </div>
               )}
+              
+              {/* Zoom Control */}
+              <div className="mt-5 bg-gray-50 p-3 rounded-xl border border-gray-200">
+                <div className="flex justify-between items-center mb-1.5">
+                  <p className="text-xs font-bold text-gray-600 flex items-center gap-1.5"><i className="fas fa-search-plus text-[12px]"></i> 預覽畫面縮放</p>
+                  <span className="text-xs font-mono font-bold text-indigo-600 bg-indigo-100 px-2 py-0.5 rounded">{Math.round(zoom * 100)}%</span>
+                </div>
+                <input type="range" min="0.3" max="1.5" step="0.05" value={zoom} onChange={e=>setZoom(Number(e.target.value))} className="w-full accent-indigo-600 cursor-pointer"/>
+                <p className="text-[10px] text-gray-400 mt-2 leading-tight">
+                  <i className="fas fa-info-circle"></i> 右側預覽為真實比例，<strong className="text-red-400">紅線為列印分頁參考線</strong>，超出版面時文章會自動跨頁。
+                </p>
+              </div>
             </div>
 
             <hr className="border-gray-100"/>
@@ -796,6 +822,7 @@
               </div>
             </div>
 
+            {}
             {/* Typography */}
             <div className="bg-gray-50 rounded-xl border border-gray-200">
               <button onClick={()=>setShowTypo(!showTypo)} className="w-full flex justify-between items-center p-3.5 font-semibold text-gray-600 hover:text-blue-600 transition-colors text-sm">
@@ -967,9 +994,9 @@
                           <div className="flex items-center gap-2 bg-gray-50 p-2 rounded-lg border border-gray-200">
                             <span className="text-xs font-semibold text-gray-600 shrink-0">照片大小：</span>
                             <div className="flex gap-1 flex-1">
-                              {[['small','小',60],['medium','中',80],['large','大',100]].map(([v,l,pct])=>(
+                              {[['small','小',60],['medium','中',80]].map(([v,l,pct])=>(
                                 <button key={v} onClick={()=>{updateArticle(art.id,'imageSize',v); updateArticle(art.id,'imageWidth',pct);}}
-                                  className={`flex-1 text-xs py-1 rounded-lg transition-colors border font-semibold ${(art.imageWidth??{small:60,medium:80,large:100}[art.imageSize]??80)===pct?'bg-indigo-600 text-white border-indigo-700':'bg-white text-gray-600 border-gray-300 hover:bg-gray-100'}`}>
+                                  className={`flex-1 text-xs py-1 rounded-lg transition-colors border font-semibold ${(art.imageWidth??{small:60,medium:80}[art.imageSize]??80)===pct?'bg-indigo-600 text-white border-indigo-700':'bg-white text-gray-600 border-gray-300 hover:bg-gray-100'}`}>
                                   {l}圖
                                 </button>
                               ))}
@@ -979,11 +1006,11 @@
                             <i className="fas fa-left-right text-[11px] text-gray-400 shrink-0"></i>
                             <span className="text-xs font-semibold text-gray-600 shrink-0">寬度</span>
                             <input type="range" min="20" max="100" step="5"
-                              value={art.imageWidth ?? {small:60,medium:80,large:100}[art.imageSize] ?? 80}
+                              value={art.imageWidth ?? {small:60,medium:80}[art.imageSize] ?? 80}
                               onChange={e=>updateArticle(art.id,'imageWidth',Number(e.target.value))}
                               className="flex-1 accent-indigo-600"/>
                             <span className="text-xs font-mono text-indigo-600 font-bold w-9 text-right shrink-0">
-                              {art.imageWidth ?? {small:60,medium:80,large:100}[art.imageSize] ?? 80}%
+                              {art.imageWidth ?? {small:60,medium:80}[art.imageSize] ?? 80}%
                             </span>
                           </div>
                           <p className="text-[10px] text-gray-400 flex items-center gap-1">
@@ -1014,6 +1041,7 @@
 
           </div>
 
+          {}
           {/* Bottom bar */}
           <div className="p-4 bg-gray-50 border-t border-gray-100 shrink-0 flex flex-col gap-2.5">
             <input type="file" accept=".json" className="hidden" ref={jsonInputRef} onChange={loadDraftFile}/>
@@ -1040,7 +1068,7 @@
 
         {/* ═══════════ RIGHT PREVIEW ═══════════ */}
         <div className="w-full flex-1 p-4 md:p-8 overflow-y-auto bg-slate-200 print:bg-transparent print:w-full print:p-0 print:overflow-visible">
-          <div className="mx-auto drop-shadow-2xl print:drop-shadow-none print:w-full flex justify-center transition-all">
+          <div style={{ zoom: zoom }} className="w-full flex justify-center transform-origin-top transition-transform print:!zoom-100">
             {theme==='retro'      && <RetroPreview/>}
             {theme==='modern'     && <ModernPreview/>}
             {theme==='newsletter' && <NewsletterPreview/>}
