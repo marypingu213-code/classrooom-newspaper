@@ -115,9 +115,9 @@
   };
 
   const DEFAULT_ARTICLES = [
-    { id: 1, title: '媽媽，謝謝您', author: '小安', titleTypo: { font: '', size: '' }, imageUrl: '', imageSize: 'medium', colSpan: 1, content: '媽媽每天幫我準備早餐。\n媽媽很溫柔，也很勤勞。\n我最喜歡媽媽的笑容。\n我想對媽媽說：謝謝你每天照顧我。\n媽媽辛苦了，我愛你。' },
-    { id: 2, title: '戶外教育真有趣', author: '小熙', titleTypo: { font: '', size: '' }, imageUrl: '', imageSize: 'medium', colSpan: 1, content: '我們去了科學博物館。\n我看到了恐龍骨骼，覺得很酷。\n我最喜歡觸控螢幕，因為可以自己操作。\n我和同學一起玩尋寶遊戲。\n這次校外教學，我很開心。' },
-    { id: 3, title: '我的好媽媽', author: '小愷', titleTypo: { font: '', size: '' }, imageUrl: '', imageSize: 'small', colSpan: 1, content: '媽媽喜歡看書和做蛋糕。\n媽媽常常幫我梳頭髮。\n我要送媽媽一張卡片，讓她開心。\n媽媽是世界上最好的人。' }
+    { id: 1, title: '媽媽，謝謝您', author: '小安', titleTypo: { font: '', size: '' }, imageUrl: '', imageSize: 'medium', imageHeight: null, colSpan: 1, content: '媽媽每天幫我準備早餐。\n媽媽很溫柔，也很勤勞。\n我最喜歡媽媽的笑容。\n我想對媽媽說：謝謝你每天照顧我。\n媽媽辛苦了，我愛你。' },
+    { id: 2, title: '戶外教育真有趣', author: '小熙', titleTypo: { font: '', size: '' }, imageUrl: '', imageSize: 'medium', imageHeight: null, colSpan: 1, content: '我們去了科學博物館。\n我看到了恐龍骨骼，覺得很酷。\n我最喜歡觸控螢幕，因為可以自己操作。\n我和同學一起玩尋寶遊戲。\n這次校外教學，我很開心。' },
+    { id: 3, title: '我的好媽媽', author: '小愷', titleTypo: { font: '', size: '' }, imageUrl: '', imageSize: 'small', imageHeight: null, colSpan: 1, content: '媽媽喜歡看書和做蛋糕。\n媽媽常常幫我梳頭髮。\n我要送媽媽一張卡片，讓她開心。\n媽媽是世界上最好的人。' }
   ];
 
   /* ───── App ───── */
@@ -210,7 +210,7 @@
 
     const addArticle = () => setArticles(prev => [
       ...prev,
-      { id: Date.now(), title: '', author: '', content: '', imageUrl: '', imageSize: 'medium', colSpan: 1, titleTypo: { font: '', size: '' } }
+      { id: Date.now(), title: '', author: '', content: '', imageUrl: '', imageSize: 'medium', imageHeight: null, colSpan: 1, titleTypo: { font: '', size: '' } }
     ]);
     const removeArticle  = (id) => { if (articles.length > 1) setArticles(prev => prev.filter(a => a.id !== id)); };
     const updateArticle  = useCallback((id, field, value) =>
@@ -329,7 +329,7 @@
     };
 
     /* ── Render content ── */
-    const renderContent=(content,th,imgUrl,imgSize,colSpan=1)=>{
+    const renderContent=(content,th,imgUrl,imgSize,colSpan=1,imageHeight=null,artId=null)=>{
       const paras=(content||'').split('\n');
       let firstValid=true;
       const rendered=paras.map((p,i)=>{
@@ -342,12 +342,51 @@
         return <p key={i} className={`mb-3 ${dc}`}>{p}</p>;
       });
       if(!imgUrl) return <div>{rendered}</div>;
+
       if(th==='retro'||th==='modern'){
-        /* 圖片保持原始比例，移除灰階；復古版保留棕色邊框 */
-        const base=th==='retro'
-          ?'block w-full border-[4px] border-double border-stone-800 p-0.5 shadow-sm mb-3 object-contain'
-          :'block w-full border border-zinc-300 shadow-sm mb-3 object-contain';
-        return <div><img src={imgUrl} alt="配圖" className={base} style={{height:'auto',maxHeight:'280px'}} onError={e=>e.target.style.display='none'}/>{rendered}</div>;
+        /* 圖片高度：自訂 > 大中小預設 */
+        const presetH = {small: 120, medium: 200, large: 300};
+        const h = imageHeight || presetH[imgSize] || 200;
+        const border=th==='retro'
+          ?'border-[4px] border-double border-stone-800 p-0.5 shadow-sm'
+          :'border border-zinc-300 shadow-sm';
+
+        /* 拖曳把手：底部往下拉改高度 */
+        const onImgResize = artId ? (e) => {
+          e.preventDefault(); e.stopPropagation();
+          const startY = e.clientY;
+          const startH = h;
+          const onMove = (mv) => {
+            const next = Math.max(60, Math.min(500, startH + (mv.clientY - startY)));
+            setArticles(prev => prev.map(a => a.id === artId ? {...a, imageHeight: Math.round(next)} : a));
+          };
+          const onUp = () => {
+            document.removeEventListener('mousemove', onMove);
+            document.removeEventListener('mouseup', onUp);
+          };
+          document.addEventListener('mousemove', onMove);
+          document.addEventListener('mouseup', onUp);
+        } : null;
+
+        return (
+          <div>
+            <div className="relative mb-3 group/img" style={{userSelect:'none'}}>
+              <img src={imgUrl} alt="配圖" draggable={false}
+                className={`block w-full object-cover ${border}`}
+                style={{height:`${h}px`}}
+                onError={e=>e.target.style.display='none'}/>
+              {/* 拖曳把手 — 只在螢幕上顯示 */}
+              {onImgResize && (
+                <div onMouseDown={onImgResize}
+                  className="print:hidden absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2 w-10 h-4 bg-indigo-500 rounded-full flex items-center justify-center cursor-ns-resize opacity-0 group-hover/img:opacity-100 transition-opacity z-20 shadow"
+                  title="上下拖曳調整圖片高度">
+                  <i className="fas fa-grip-lines text-white text-[10px]"></i>
+                </div>
+              )}
+            </div>
+            {rendered}
+          </div>
+        );
       }
       if(th==='newsletter'){
         const cls=imgSize==='small'?'w-1/2 rounded-lg mx-auto block object-cover shadow-md mb-6':imgSize==='large'?'w-full rounded-2xl object-cover shadow-md mb-6 h-64':'w-3/4 rounded-xl mx-auto block object-cover shadow-md mb-6';
@@ -468,7 +507,7 @@
               </div>
               <h2 className="text-2xl font-black mb-2 leading-snug border-t-[3px] border-stone-800 pt-2" style={getArtTitleStyle(a)}>{a.title||'（未填標題）'}</h2>
               <div className="text-stone-600 font-bold mb-3 tracking-wide text-sm" style={getTypoStyle('artAuthor')}>撰文 / {a.author||'（未填作者）'}</div>
-              {renderContent(a.content,'retro',a.imageUrl,a.imageSize,a.colSpan||1)}
+              {renderContent(a.content,'retro',a.imageUrl,a.imageSize,a.colSpan||1,a.imageHeight||null,a.id)}
             </div>
           ))}
         </div>
@@ -521,7 +560,7 @@
               <div className="flex items-center gap-2 mb-4 pb-3 border-b-2 border-zinc-900 text-sm font-bold text-zinc-500 uppercase tracking-wider" style={getTypoStyle('artAuthor')}>
                 <i className="fas fa-user text-[12px]"></i>{a.author||'（未填作者）'}
               </div>
-              {renderContent(a.content,'modern',a.imageUrl,a.imageSize,a.colSpan||1)}
+              {renderContent(a.content,'modern',a.imageUrl,a.imageSize,a.colSpan||1,a.imageHeight||null,a.id)}
             </div>
           ))}
         </div>
@@ -875,16 +914,34 @@
                         </div>
                       </div>
                       {art.imageUrl&&(
-                        <div className="flex items-center gap-2 bg-gray-50 p-2 rounded-lg border border-gray-200">
-                          <span className="text-xs font-semibold text-gray-600 shrink-0">照片大小：</span>
-                          <div className="flex gap-1 flex-1">
-                            {[['small','小'],['medium','中'],['large','大']].map(([v,l])=>(
-                              <button key={v} onClick={()=>updateArticle(art.id,'imageSize',v)}
-                                className={`flex-1 text-xs py-1 rounded-lg transition-colors border font-semibold ${art.imageSize===v?'bg-indigo-600 text-white border-indigo-700':'bg-white text-gray-600 border-gray-300 hover:bg-gray-100'}`}>
-                                {l}圖
-                              </button>
-                            ))}
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2 bg-gray-50 p-2 rounded-lg border border-gray-200">
+                            <span className="text-xs font-semibold text-gray-600 shrink-0">照片大小：</span>
+                            <div className="flex gap-1 flex-1">
+                              {[['small','小',120],['medium','中',200],['large','大',300]].map(([v,l,px])=>(
+                                <button key={v} onClick={()=>{updateArticle(art.id,'imageSize',v);updateArticle(art.id,'imageHeight',px);}}
+                                  className={`flex-1 text-xs py-1 rounded-lg transition-colors border font-semibold ${art.imageSize===v&&!art.imageHeight?'bg-indigo-600 text-white border-indigo-700':'bg-white text-gray-600 border-gray-300 hover:bg-gray-100'}`}>
+                                  {l}圖
+                                </button>
+                              ))}
+                            </div>
                           </div>
+                          {/* 精細高度調整 */}
+                          <div className="flex items-center gap-2 bg-gray-50 p-2 rounded-lg border border-gray-200">
+                            <i className="fas fa-up-down text-[11px] text-gray-400 shrink-0"></i>
+                            <span className="text-xs font-semibold text-gray-600 shrink-0">高度</span>
+                            <input type="range" min="60" max="500" step="10"
+                              value={art.imageHeight || {small:120,medium:200,large:300}[art.imageSize] || 200}
+                              onChange={e=>updateArticle(art.id,'imageHeight',Number(e.target.value))}
+                              className="flex-1 accent-indigo-600"/>
+                            <span className="text-xs font-mono text-indigo-600 font-bold w-10 text-right shrink-0">
+                              {art.imageHeight || {small:120,medium:200,large:300}[art.imageSize] || 200}px
+                            </span>
+                          </div>
+                          <p className="text-[10px] text-gray-400 flex items-center gap-1">
+                            <i className="fas fa-hand-point-up text-[10px]"></i>
+                            也可以在右側預覽圖片底部直接拖曳調整高度
+                          </p>
                         </div>
                       )}
                     </div>
