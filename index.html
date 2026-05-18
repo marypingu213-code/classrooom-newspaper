@@ -807,6 +807,21 @@
           </div>
 
           <div className="p-4 bg-gray-50 border-t border-gray-100 shrink-0 flex flex-col gap-2.5">
+            <input type="file" accept=".json" className="hidden" ref={jsonInputRef} onChange={loadDraftFile}/>
+            <p className="text-[11px] text-gray-400 text-center leading-snug">
+              💡 <span className="font-semibold text-gray-500">換電腦</span>請用「匯出」帶走 .json，到新電腦「載入檔案」即可還原
+            </p>
+            <div className="flex gap-2">
+              <button onClick={saveDraft} className="flex-1 flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 rounded-lg text-sm transition-colors shadow-sm">
+                <i className="fas fa-file-export text-[13px]"></i> 匯出進度
+              </button>
+              <button onClick={()=>jsonInputRef.current?.click()} className="flex-1 flex items-center justify-center gap-1.5 bg-white border-2 border-emerald-400 text-emerald-700 hover:bg-emerald-50 font-bold py-2.5 rounded-lg text-sm transition-colors">
+                <i className="fas fa-file-import text-[13px]"></i> 載入檔案
+              </button>
+            </div>
+            <button onClick={loadDraftLocal} className="w-full flex items-center justify-center gap-1.5 bg-white border border-gray-300 hover:bg-gray-50 text-gray-600 font-semibold py-2 rounded-lg text-xs transition-colors">
+              <i className="fas fa-desktop text-[12px]"></i> 讀取此電腦的暫存
+            </button>
             <button onClick={()=>window.print()} className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-rose-500 to-orange-400 hover:from-rose-600 hover:to-orange-500 text-white font-bold py-3 rounded-xl transition-all shadow-md">
               <i className="fas fa-print text-[18px]"></i> 列印 / 匯出 PDF
             </button>
