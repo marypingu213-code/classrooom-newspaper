@@ -86,7 +86,7 @@
 <body>
 <div id="root"></div>
 <script type="text/babel">
-  const { useState, useRef, useCallback } = React;
+  const { useState, useRef, useCallback, useEffect } = React;
 
   /* ───── Constants ───── */
   const AUTHORS = ['小齊', '小欣', '小晴', '小銓', '小洋', '小沄', '小盧', '小舜', '小安', '小凱', '小熙', '小睿', '小硯', '小碩', '小翰', '小愷', '小霈', '小恩', '小元', '小穎', '小軒', '小宥', '小涵'];
@@ -147,7 +147,56 @@
 
     const [articles, setArticles] = useState(DEFAULT_ARTICLES);
 
-    /* ── article refs for quick-nav scroll ── */
+  /* ── Masonry Grid Effect (消除大片空白瀑布流) ── */
+  useEffect(() => {
+    if (theme === 'newsletter') return;
+
+    const updateGrid = () => {
+      const grids = document.querySelectorAll('.print-grid');
+      grids.forEach(grid => {
+        // 設定極小的網格列高，將垂直距離控制權交給跨列(span)
+        grid.style.gridAutoRows = '5px';
+        grid.style.rowGap = '0px';
+        const items = grid.querySelectorAll('.art-wrapper');
+        items.forEach(item => {
+          const inner = item.querySelector('.art-inner');
+          if (inner) {
+            // 使用 offsetHeight 取得未被縮放比例影響的真實高度
+            const h = inner.offsetHeight;
+            // 32 代表每篇文章的垂直間距約 2rem，5 需對應上方的 gridAutoRows
+            item.style.gridRowEnd = `span ${Math.ceil((h + 32) / 5)}`;
+          }
+        });
+      });
+    };
+
+    let animationFrameId;
+    const ro = new ResizeObserver(() => {
+      cancelAnimationFrame(animationFrameId);
+      animationFrameId = requestAnimationFrame(updateGrid);
+    });
+
+    // 監聽所有內部容器的高度變化 (打字、拖曳時會觸發)
+    document.querySelectorAll('.art-inner').forEach(el => ro.observe(el));
+
+    // 確保圖片載入完成後重新計算高度
+    const onImgLoad = () => {
+      cancelAnimationFrame(animationFrameId);
+      animationFrameId = requestAnimationFrame(updateGrid);
+    };
+    const images = document.querySelectorAll('.art-inner img');
+    images.forEach(img => img.addEventListener('load', onImgLoad));
+
+    updateGrid();
+
+    return () => {
+      ro.disconnect();
+      cancelAnimationFrame(animationFrameId);
+      images.forEach(img => img.removeEventListener('load', onImgLoad));
+    };
+  }, [articles, theme, paperSize, zoom]);
+
+  /* ── article refs for quick-nav scroll ── */
     const articleRefs = useRef({});
     const scrollToArticle = (id) => {
       const el = articleRefs.current[id];
@@ -505,10 +554,10 @@
           </div>
         </div>
         <div ref={gridRef} className="print-grid text-justify text-[15px] leading-relaxed relative z-10"
-          style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'2rem 2rem',alignItems:'start',...getTypoStyle('artContent')}}>
+          style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',columnGap:'2rem',alignItems:'start',...getTypoStyle('artContent')}}>
           {articles.map(a=>(
             <div key={a.id}
-              className={`art-wrapper pb-5 border-b-2 border-dotted border-stone-400/60 ${draggingId===a.id?'is-dragging':''} ${dragOverId===a.id?'drag-over-target':''} ${resizingId===a.id?'is-resizing':''}`}
+              className={`art-wrapper ${draggingId===a.id?'is-dragging':''} ${dragOverId===a.id?'drag-over-target':''} ${resizingId===a.id?'is-resizing':''}`}
               style={{breakInside:'avoid',pageBreakInside:'avoid',gridColumn:`span ${a.colSpan||1}`,position:'relative'}}
               draggable={dragEnabled===a.id}
               onDragStart={e=>handleDragStart(e,a.id)}
@@ -516,24 +565,26 @@
               onDrop={e=>handleDrop(e,a.id)}
               onDragEnd={handleDragEnd}
             >
-              {/* ★ Drag handle — 按住才啟動拖曳 */}
-              <div className="drag-handle print:hidden"
-                onMouseDown={e=>{e.stopPropagation(); setDragEnabled(a.id);}}
-                onMouseUp={()=>setDragEnabled(null)}
-              >
-                <i className="fas fa-grip-horizontal text-[11px]"></i>
-                <span style={{fontSize:'10px'}}>{a.author||'拖曳移動'}</span>
+              <div className="art-inner pb-5 border-b-2 border-dotted border-stone-400/60" style={{ position: 'relative', height: 'max-content' }}>
+                {/* ★ Drag handle — 按住才啟動拖曳 */}
+                <div className="drag-handle print:hidden"
+                  onMouseDown={e=>{e.stopPropagation(); setDragEnabled(a.id);}}
+                  onMouseUp={()=>setDragEnabled(null)}
+                >
+                  <i className="fas fa-grip-horizontal text-[11px]"></i>
+                  <span style={{fontSize:'10px'}}>{a.author||'拖曳移動'}</span>
+                </div>
+                {/* ★ Resize handle */}
+                <div className="resize-handle print:hidden"
+                  draggable={false}
+                  onMouseDown={e=>{e.stopPropagation(); handleResizeStart(e,a.id,a.colSpan||1);}}
+                  title={`目前 ${a.colSpan||1} 欄，左右拖曳調整`}>
+                  <i className="fas fa-arrows-left-right text-[12px]"></i>
+                </div>
+                <h2 className="text-2xl font-black mb-2 leading-snug border-t-[3px] border-stone-800 pt-2" style={getArtTitleStyle(a)}>{a.title||'（未填標題）'}</h2>
+                <div className="text-stone-600 font-bold mb-3 tracking-wide text-sm" style={getTypoStyle('artAuthor')}>撰文 / {a.author||'（未填作者）'}</div>
+                {renderContent(a.content,'retro',a.imageUrl,a.imageSize,a.colSpan||1,a.imageWidth??null,a.id)}
               </div>
-              {/* ★ Resize handle */}
-              <div className="resize-handle print:hidden"
-                draggable={false}
-                onMouseDown={e=>{e.stopPropagation(); handleResizeStart(e,a.id,a.colSpan||1);}}
-                title={`目前 ${a.colSpan||1} 欄，左右拖曳調整`}>
-                <i className="fas fa-arrows-left-right text-[12px]"></i>
-              </div>
-              <h2 className="text-2xl font-black mb-2 leading-snug border-t-[3px] border-stone-800 pt-2" style={getArtTitleStyle(a)}>{a.title||'（未填標題）'}</h2>
-              <div className="text-stone-600 font-bold mb-3 tracking-wide text-sm" style={getTypoStyle('artAuthor')}>撰文 / {a.author||'（未填作者）'}</div>
-              {renderContent(a.content,'retro',a.imageUrl,a.imageSize,a.colSpan||1,a.imageWidth??null,a.id)}
             </div>
           ))}
         </div>
@@ -576,10 +627,10 @@
           </div>
         </div>
         <div ref={gridRef} className="print-grid text-justify text-base leading-relaxed relative z-10"
-          style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'2rem 2rem',alignItems:'start',...getTypoStyle('artContent')}}>
+          style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',columnGap:'2rem',alignItems:'start',...getTypoStyle('artContent')}}>
           {articles.map(a=>(
             <div key={a.id}
-              className={`art-wrapper pb-8 border-b-[3px] border-zinc-100 ${draggingId===a.id?'is-dragging':''} ${dragOverId===a.id?'drag-over-target':''} ${resizingId===a.id?'is-resizing':''}`}
+              className={`art-wrapper ${draggingId===a.id?'is-dragging':''} ${dragOverId===a.id?'drag-over-target':''} ${resizingId===a.id?'is-resizing':''}`}
               style={{breakInside:'avoid',pageBreakInside:'avoid',gridColumn:`span ${a.colSpan||1}`,position:'relative'}}
               draggable={dragEnabled===a.id}
               onDragStart={e=>handleDragStart(e,a.id)}
@@ -587,26 +638,28 @@
               onDrop={e=>handleDrop(e,a.id)}
               onDragEnd={handleDragEnd}
             >
-              {/* ★ Drag handle — 按住才啟動拖曳 */}
-              <div className="drag-handle print:hidden"
-                onMouseDown={e=>{e.stopPropagation(); setDragEnabled(a.id);}}
-                onMouseUp={()=>setDragEnabled(null)}
-              >
-                <i className="fas fa-grip-horizontal text-[11px]"></i>
-                <span style={{fontSize:'10px'}}>{a.author||'拖曳移動'}</span>
+              <div className="art-inner pb-8 border-b-[3px] border-zinc-100" style={{ position: 'relative', height: 'max-content' }}>
+                {/* ★ Drag handle — 按住才啟動拖曳 */}
+                <div className="drag-handle print:hidden"
+                  onMouseDown={e=>{e.stopPropagation(); setDragEnabled(a.id);}}
+                  onMouseUp={()=>setDragEnabled(null)}
+                >
+                  <i className="fas fa-grip-horizontal text-[11px]"></i>
+                  <span style={{fontSize:'10px'}}>{a.author||'拖曳移動'}</span>
+                </div>
+                {/* ★ Resize handle */}
+                <div className="resize-handle print:hidden"
+                  draggable={false}
+                  onMouseDown={e=>{e.stopPropagation(); handleResizeStart(e,a.id,a.colSpan||1);}}
+                  title={`目前 ${a.colSpan||1} 欄，左右拖曳調整`}>
+                  <i className="fas fa-arrows-left-right text-[12px]"></i>
+                </div>
+                <h2 className="text-3xl font-black tracking-tight mb-3 leading-tight" style={getArtTitleStyle(a)}>{a.title||'（未填標題）'}</h2>
+                <div className="flex items-center gap-2 mb-4 pb-3 border-b-2 border-zinc-900 text-sm font-bold text-zinc-500 uppercase tracking-wider" style={getTypoStyle('artAuthor')}>
+                  <i className="fas fa-user text-[12px]"></i>{a.author||'（未填作者）'}
+                </div>
+                {renderContent(a.content,'modern',a.imageUrl,a.imageSize,a.colSpan||1,a.imageWidth??null,a.id)}
               </div>
-              {/* ★ Resize handle */}
-              <div className="resize-handle print:hidden"
-                draggable={false}
-                onMouseDown={e=>{e.stopPropagation(); handleResizeStart(e,a.id,a.colSpan||1);}}
-                title={`目前 ${a.colSpan||1} 欄，左右拖曳調整`}>
-                <i className="fas fa-arrows-left-right text-[12px]"></i>
-              </div>
-              <h2 className="text-3xl font-black tracking-tight mb-3 leading-tight" style={getArtTitleStyle(a)}>{a.title||'（未填標題）'}</h2>
-              <div className="flex items-center gap-2 mb-4 pb-3 border-b-2 border-zinc-900 text-sm font-bold text-zinc-500 uppercase tracking-wider" style={getTypoStyle('artAuthor')}>
-                <i className="fas fa-user text-[12px]"></i>{a.author||'（未填作者）'}
-              </div>
-              {renderContent(a.content,'modern',a.imageUrl,a.imageSize,a.colSpan||1,a.imageWidth??null,a.id)}
             </div>
           ))}
         </div>
