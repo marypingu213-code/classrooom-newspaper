@@ -15,13 +15,7 @@
       body { -webkit-print-color-adjust: exact; print-color-adjust: exact; zoom: 1 !important; }
     }
     body { font-family: ui-sans-serif, system-ui, sans-serif; }
-    /* ── Page-break fix: inline-block forces column-break avoidance in all browsers ── */
-    .article-col-block {
-      display: inline-block;
-      width: 100%;
-      break-inside: avoid;
-      page-break-inside: avoid;
-    }
+    
     @keyframes mic-pulse {
       0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.5); }
       50% { box-shadow: 0 0 0 8px rgba(239, 68, 68, 0); }
@@ -42,12 +36,10 @@
     .panel-scroll::-webkit-scrollbar-track { background: transparent; }
     .panel-scroll::-webkit-scrollbar-thumb { background: #e5e7eb; border-radius: 4px; }
 
-    /* ── Interactive layout handles (hidden in print) ── */
+    /* ── Interactive layout handles ── */
     .art-wrapper { position: relative; }
-    .art-wrapper .drag-handle,
-    .art-wrapper .resize-handle { opacity: 0; transition: opacity 0.15s; }
-    .art-wrapper:hover .drag-handle,
-    .art-wrapper:hover .resize-handle { opacity: 1; }
+    .art-wrapper .drag-handle { opacity: 0; transition: opacity 0.15s; }
+    .art-wrapper:hover .drag-handle { opacity: 1; }
 
     /* drag handle — top-centre grip */
     .drag-handle {
@@ -59,27 +51,12 @@
     }
     .drag-handle:active { cursor: grabbing; }
 
-    /* resize handle — right-centre bar */
-    .resize-handle {
-      position: absolute; top: 50%; right: -12px;
-      transform: translateY(-50%);
-      cursor: col-resize; background: #6366f1; color: #fff;
-      width: 20px; height: 40px; border-radius: 6px;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 13px; z-index: 30; user-select: none;
-    }
-
     /* drag-over highlight */
     .drag-over-target { outline: 3px dashed #6366f1 !important; outline-offset: 4px; }
-
-    /* dragging dim */
     .is-dragging { opacity: 0.35; }
 
-    /* resizing glow */
-    .is-resizing { outline: 3px solid #f59e0b !important; outline-offset: 2px; }
-
     @media print {
-      .drag-handle, .resize-handle { display: none !important; }
+      .drag-handle { display: none !important; }
     }
   </style>
 </head>
@@ -128,7 +105,7 @@
     const [pubDate, setPubDate]         = useState('2026年5月11日');
     const [theme, setTheme]             = useState('retro');
     const [paperSize, setPaperSize]     = useState('A3');
-    const [zoom, setZoom]               = useState(0.65); // 新增預覽縮放比例
+    const [zoom, setZoom]               = useState(0.65);
 
     const [typo, setTypo] = useState({
       pubName:    { font: '', size: '' }, pubSubtitle:{ font: '', size: '' },
@@ -147,56 +124,7 @@
 
     const [articles, setArticles] = useState(DEFAULT_ARTICLES);
 
-  /* ── Masonry Grid Effect (消除大片空白瀑布流) ── */
-  useEffect(() => {
-    if (theme === 'newsletter') return;
-
-    const updateGrid = () => {
-      const grids = document.querySelectorAll('.print-grid');
-      grids.forEach(grid => {
-        // 設定極小的網格列高，將垂直距離控制權交給跨列(span)
-        grid.style.gridAutoRows = '5px';
-        grid.style.rowGap = '0px';
-        const items = grid.querySelectorAll('.art-wrapper');
-        items.forEach(item => {
-          const inner = item.querySelector('.art-inner');
-          if (inner) {
-            // 使用 offsetHeight 取得未被縮放比例影響的真實高度
-            const h = inner.offsetHeight;
-            // 32 代表每篇文章的垂直間距約 2rem，5 需對應上方的 gridAutoRows
-            item.style.gridRowEnd = `span ${Math.ceil((h + 32) / 5)}`;
-          }
-        });
-      });
-    };
-
-    let animationFrameId;
-    const ro = new ResizeObserver(() => {
-      cancelAnimationFrame(animationFrameId);
-      animationFrameId = requestAnimationFrame(updateGrid);
-    });
-
-    // 監聽所有內部容器的高度變化 (打字、拖曳時會觸發)
-    document.querySelectorAll('.art-inner').forEach(el => ro.observe(el));
-
-    // 確保圖片載入完成後重新計算高度
-    const onImgLoad = () => {
-      cancelAnimationFrame(animationFrameId);
-      animationFrameId = requestAnimationFrame(updateGrid);
-    };
-    const images = document.querySelectorAll('.art-inner img');
-    images.forEach(img => img.addEventListener('load', onImgLoad));
-
-    updateGrid();
-
-    return () => {
-      ro.disconnect();
-      cancelAnimationFrame(animationFrameId);
-      images.forEach(img => img.removeEventListener('load', onImgLoad));
-    };
-  }, [articles, theme, paperSize, zoom]);
-
-  /* ── article refs for quick-nav scroll ── */
+    /* ── article refs for quick-nav scroll ── */
     const articleRefs = useRef({});
     const scrollToArticle = (id) => {
       const el = articleRefs.current[id];
@@ -232,32 +160,6 @@
       setDraggingId(null); setDragOverId(null); setDragEnabled(null);
     };
     const handleDragEnd = () => { setDraggingId(null); setDragOverId(null); setDragEnabled(null); };
-
-    /* ── Resize-by-drag (right edge handle) ── */
-    const gridRef = useRef(null);
-    const [resizingId, setResizingId] = useState(null);
-
-    const handleResizeStart = useCallback((e, artId, currentSpan) => {
-      e.preventDefault(); e.stopPropagation();
-      setResizingId(artId);
-      const startX    = e.clientX;
-      const startSpan = currentSpan;
-
-      const onMove = (mv) => {
-        if (!gridRef.current) return;
-        const colW  = gridRef.current.offsetWidth / 4;
-        const delta = Math.round((mv.clientX - startX) / colW);
-        const next  = Math.max(1, Math.min(4, startSpan + delta));
-        setArticles(prev => prev.map(a => a.id === artId ? { ...a, colSpan: next } : a));
-      };
-      const onUp = () => {
-        setResizingId(null);
-        document.removeEventListener('mousemove', onMove);
-        document.removeEventListener('mouseup',   onUp);
-      };
-      document.addEventListener('mousemove', onMove);
-      document.addEventListener('mouseup',   onUp);
-    }, []);
 
     const addArticle = () => setArticles(prev => [
       ...prev,
@@ -342,14 +244,14 @@
     /* ── Save / Load ── */
     const getSnapshot=()=>({pubName,pubSubtitle,pubDate,typo,articles,theme,paperSize});
     const saveDraft=()=>{
-      localStorage.setItem('np_draft_v3',JSON.stringify(getSnapshot()));
+      localStorage.setItem('np_draft_v4',JSON.stringify(getSnapshot()));
       const blob=new Blob([JSON.stringify(getSnapshot(),null,2)],{type:'application/json'});
       const url=URL.createObjectURL(blob); const a=document.createElement('a');
       a.href=url; a.download=`班級小報_${pubDate.replace(/[年月日]/g,'')}.json`; a.click(); URL.revokeObjectURL(url);
       showToast('💾 已下載進度檔，換電腦時載入即可！');
     };
     const loadDraftLocal=()=>{
-      const raw=localStorage.getItem('np_draft_v3');
+      const raw=localStorage.getItem('np_draft_v4');
       if(!raw){showToast('📂 此電腦沒有暫存資料，請改用「載入檔案」。'); return;}
       try{
         const p=JSON.parse(raw);
@@ -371,7 +273,7 @@
           if(p.pubDate) setPubDate(p.pubDate); if(p.typo) setTypo(p.typo);
           if(p.articles) setArticles(p.articles); if(p.theme) setTheme(p.theme);
           if(p.paperSize) setPaperSize(p.paperSize);
-          localStorage.setItem('np_draft_v3',JSON.stringify(p));
+          localStorage.setItem('np_draft_v4',JSON.stringify(p));
           showToast('✅ 已從檔案載入進度！');
         }catch{showToast('❌ 檔案格式有誤，請選正確的 .json 進度檔。');}
       };
@@ -395,8 +297,7 @@
       if(!imgUrl) return <div>{rendered}</div>;
 
       if(th==='retro'||th==='modern'){
-        /* 等比例縮放：控制寬度百分比，高度 auto 自動跟著比例 */
-        const presetW = {small: 60, medium: 80}; /* 移除了 large */
+        const presetW = {small: 60, medium: 80};
         const w = imageWidth ?? presetW[imgSize] ?? 80;
         const border = th==='retro'
           ? 'border-[4px] border-double border-stone-800 p-0.5 shadow-sm'
@@ -430,12 +331,11 @@
                 className={`block object-contain ${border}`}
                 style={{width:`${w}%`, height:'auto'}}
                 onError={e=>e.target.style.display='none'}/>
-              {/* 右邊拖曳把手 */}
               {onImgResize && (
                 <div onMouseDown={onImgResize}
                   style={{left:`${w}%`, top:'50%', transform:'translateY(-50%)'}}
                   className="print:hidden absolute w-4 h-10 bg-indigo-500 rounded-full flex items-center justify-center cursor-ew-resize opacity-0 group-hover/img:opacity-100 transition-opacity z-20 shadow -ml-2"
-                  title="左右拖曳等比例縮放圖片">
+                  title="左右拖曳縮放圖片">
                   <i className="fas fa-grip-lines-vertical text-white text-[9px]"></i>
                 </div>
               )}
@@ -456,34 +356,17 @@
       const active=isListening&&voiceTarget?.artId===artId&&voiceTarget?.field===field;
       return(
         <button onClick={()=>active?stopVoice():startVoice(artId,field)}
-          title={active?'點擊停止錄音':field==='title'?'語音輸入標題':'語音輸入內文（說完一句後自動斷句）'}
+          title={active?'點擊停止錄音':field==='title'?'語音輸入標題':'語音輸入內文'}
           className={`shrink-0 w-9 h-9 rounded-lg flex items-center justify-center transition-all ${active?'bg-red-500 text-white mic-listening':'bg-gray-100 text-gray-500 hover:bg-indigo-100 hover:text-indigo-600'}`}>
           <i className={`fas ${active?'fa-stop':'fa-microphone'} text-[15px]`}></i>
         </button>
       );
     };
 
-    /* ════════════════════════════════════════
-       ── Student Quick-Nav Bar ──
-       Shows a pill for every article that has an author.
-       Clicking scrolls the left panel to that card.
-    ════════════════════════════════════════ */
     const QuickNav=()=>{
       const filled=articles.filter(a=>a.author);
       if(!filled.length) return null;
-
-      // colour palette cycling
-      const colours=[
-        'bg-rose-100 text-rose-700 border-rose-300 hover:bg-rose-500 hover:text-white hover:border-rose-500',
-        'bg-violet-100 text-violet-700 border-violet-300 hover:bg-violet-500 hover:text-white hover:border-violet-500',
-        'bg-sky-100 text-sky-700 border-sky-300 hover:bg-sky-500 hover:text-white hover:border-sky-500',
-        'bg-emerald-100 text-emerald-700 border-emerald-300 hover:bg-emerald-500 hover:text-white hover:border-emerald-500',
-        'bg-amber-100 text-amber-700 border-amber-300 hover:bg-amber-500 hover:text-white hover:border-amber-500',
-        'bg-pink-100 text-pink-700 border-pink-300 hover:bg-pink-500 hover:text-white hover:border-pink-500',
-        'bg-indigo-100 text-indigo-700 border-indigo-300 hover:bg-indigo-500 hover:text-white hover:border-indigo-500',
-        'bg-teal-100 text-teal-700 border-teal-300 hover:bg-teal-500 hover:text-white hover:border-teal-500',
-      ];
-
+      const colours=['bg-rose-100 text-rose-700 border-rose-300','bg-violet-100 text-violet-700 border-violet-300','bg-sky-100 text-sky-700 border-sky-300','bg-emerald-100 text-emerald-700 border-emerald-300','bg-amber-100 text-amber-700 border-amber-300'];
       return (
         <div className="bg-gradient-to-br from-slate-50 to-white border border-slate-200 rounded-2xl p-3.5 shadow-sm">
           <div className="flex items-center gap-2 mb-2.5">
@@ -493,56 +376,39 @@
             <p className="text-xs font-bold text-slate-600 tracking-wide">快速跳到學生</p>
             <span className="ml-auto text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full font-semibold">{filled.length} 位</span>
           </div>
-
           <div className="flex flex-wrap gap-1.5">
             {articles.map((art, idx) => {
               if (!art.author) return null;
-              const c = colours[idx % colours.length];
               return (
-                <button
-                  key={art.id}
-                  onClick={() => scrollToArticle(art.id)}
-                  className={`qnav-pill px-2.5 py-1 text-xs font-bold rounded-lg border ${c} flex items-center gap-1`}
-                  title={art.title || '（未填標題）'}
-                >
+                <button key={art.id} onClick={() => scrollToArticle(art.id)}
+                  className={`qnav-pill px-2.5 py-1 text-xs font-bold rounded-lg border ${colours[idx % colours.length]} flex items-center gap-1`} title={art.title}>
                   {art.author}
                 </button>
               );
             })}
           </div>
-
-          <p className="text-[10px] text-slate-400 mt-2 flex items-center gap-1">
-            <i className="fas fa-hand-point-up text-[10px]"></i>
-            點名字直接跳到那篇作品的編輯區
-          </p>
         </div>
       );
     };
 
     /* ── Preview: Retro ── */
     const RetroPreview=()=>{
-      const printH = paperSize === 'A3' ? '257mm' : '230mm'; /* 扣除上下各2cm邊界後的高度 */
+      const paperW = paperSize === 'A3' ? '420mm' : '390mm';
+      const paperH = paperSize === 'A3' ? '297mm' : '270mm';
+      const printH = paperSize === 'A3' ? '257mm' : '230mm';
       return (
       <div className={`wysiwyg-paper bg-[#f4ebd8] text-stone-900 font-serif border border-stone-300 mx-auto shadow-xl print:shadow-none print:border-none relative`}
-           style={{
-             width: paperSize === 'A3' ? '420mm' : '390mm',
-             minHeight: paperSize === 'A3' ? '297mm' : '270mm',
-             padding: '2cm',
-             boxSizing: 'border-box'
-           }}>
-
-        {/* ── 分頁參考線 (只在螢幕上顯示) ── */}
+           style={{ width: paperW, minHeight: paperH, padding: '2cm', boxSizing: 'border-box' }}>
+        
+        {/* 分頁參考線 */}
         <div className="print:hidden absolute pointer-events-none z-0"
-             style={{
-                 top: '2cm', bottom: '2cm', left: '2cm', right: '2cm',
+             style={{ top: '2cm', bottom: '2cm', left: '2cm', right: '2cm',
                  backgroundSize: `100% ${printH}`,
                  backgroundImage: `linear-gradient(to bottom, transparent calc(100% - 2px), rgba(239, 68, 68, 0.45) calc(100% - 2px), rgba(239, 68, 68, 0.45) 100%)`
              }}>
         </div>
-
-        <div className="absolute left-1/2 top-[2cm] bottom-[2cm] border-l-2 border-dashed border-stone-400/30 print:hidden pointer-events-none transform -translate-x-1/2 z-0"></div>
         
-        <div className="text-left border-b-[6px] border-double border-stone-800 pb-6 mb-8 relative z-10 w-full">
+        <div className="text-left border-b-[6px] border-double border-stone-800 pb-6 mb-8 relative z-10 w-full" style={{ columnSpan: 'all' }}>
           {pubSubtitle&&<div className="text-lg tracking-[0.4em] font-bold text-stone-600 mb-3" style={getTypoStyle('pubSubtitle')}>【 {pubSubtitle} 】</div>}
           <h1 className="text-6xl md:text-8xl font-black mb-6 text-stone-900 tracking-widest" style={getTypoStyle('pubName')}>{pubName}</h1>
           <div className="flex justify-between items-center text-sm border-t-2 border-b-2 border-stone-800 py-2 px-2 font-bold uppercase tracking-wider">
@@ -553,33 +419,32 @@
             </div>
           </div>
         </div>
-        <div ref={gridRef} className="print-grid text-justify text-[15px] leading-relaxed relative z-10"
-          style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',columnGap:'2rem',alignItems:'start',...getTypoStyle('artContent')}}>
+
+        {/* 專欄排版 (Multi-column) - 解決列印切割與留白問題 */}
+        <div className="text-justify text-[15px] leading-relaxed relative z-10"
+          style={{ columnCount: 4, columnGap: '2rem', display: 'block', ...getTypoStyle('artContent') }}>
           {articles.map(a=>(
             <div key={a.id}
-              className={`art-wrapper ${draggingId===a.id?'is-dragging':''} ${dragOverId===a.id?'drag-over-target':''} ${resizingId===a.id?'is-resizing':''}`}
-              style={{breakInside:'avoid',pageBreakInside:'avoid',gridColumn:`span ${a.colSpan||1}`,position:'relative'}}
+              className={`art-wrapper ${draggingId===a.id?'is-dragging':''} ${dragOverId===a.id?'drag-over-target':''}`}
+              style={{
+                breakInside: 'avoid',
+                pageBreakInside: 'avoid',
+                columnSpan: a.colSpan === 4 ? 'all' : 'none',
+                display: 'inline-block', // inline-block ensures safe pagination in columns
+                width: '100%',
+                marginBottom: '2rem',
+                position: 'relative'
+              }}
               draggable={dragEnabled===a.id}
               onDragStart={e=>handleDragStart(e,a.id)}
               onDragOver={e=>handleDragOver(e,a.id)}
               onDrop={e=>handleDrop(e,a.id)}
               onDragEnd={handleDragEnd}
             >
-              <div className="art-inner pb-5 border-b-2 border-dotted border-stone-400/60" style={{ position: 'relative', height: 'max-content' }}>
-                {/* ★ Drag handle — 按住才啟動拖曳 */}
-                <div className="drag-handle print:hidden"
-                  onMouseDown={e=>{e.stopPropagation(); setDragEnabled(a.id);}}
-                  onMouseUp={()=>setDragEnabled(null)}
-                >
+              <div className="art-inner pb-5 border-b-2 border-dotted border-stone-400/60" style={{ position: 'relative' }}>
+                <div className="drag-handle print:hidden" onMouseDown={e=>{e.stopPropagation(); setDragEnabled(a.id);}} onMouseUp={()=>setDragEnabled(null)}>
                   <i className="fas fa-grip-horizontal text-[11px]"></i>
                   <span style={{fontSize:'10px'}}>{a.author||'拖曳移動'}</span>
-                </div>
-                {/* ★ Resize handle */}
-                <div className="resize-handle print:hidden"
-                  draggable={false}
-                  onMouseDown={e=>{e.stopPropagation(); handleResizeStart(e,a.id,a.colSpan||1);}}
-                  title={`目前 ${a.colSpan||1} 欄，左右拖曳調整`}>
-                  <i className="fas fa-arrows-left-right text-[12px]"></i>
                 </div>
                 <h2 className="text-2xl font-black mb-2 leading-snug border-t-[3px] border-stone-800 pt-2" style={getArtTitleStyle(a)}>{a.title||'（未填標題）'}</h2>
                 <div className="text-stone-600 font-bold mb-3 tracking-wide text-sm" style={getTypoStyle('artAuthor')}>撰文 / {a.author||'（未填作者）'}</div>
@@ -594,28 +459,20 @@
 
     /* ── Preview: Modern ── */
     const ModernPreview=()=>{
+      const paperW = paperSize === 'A3' ? '420mm' : '390mm';
+      const paperH = paperSize === 'A3' ? '297mm' : '270mm';
       const printH = paperSize === 'A3' ? '257mm' : '230mm';
       return (
       <div className={`wysiwyg-paper bg-white text-zinc-900 font-sans mx-auto shadow-xl print:shadow-none relative`}
-           style={{
-             width: paperSize === 'A3' ? '420mm' : '390mm',
-             minHeight: paperSize === 'A3' ? '297mm' : '270mm',
-             padding: '2cm',
-             boxSizing: 'border-box'
-           }}>
-
-        {/* ── 分頁參考線 (只在螢幕上顯示) ── */}
+           style={{ width: paperW, minHeight: paperH, padding: '2cm', boxSizing: 'border-box' }}>
+        
         <div className="print:hidden absolute pointer-events-none z-0"
-             style={{
-                 top: '2cm', bottom: '2cm', left: '2cm', right: '2cm',
+             style={{ top: '2cm', bottom: '2cm', left: '2cm', right: '2cm',
                  backgroundSize: `100% ${printH}`,
                  backgroundImage: `linear-gradient(to bottom, transparent calc(100% - 2px), rgba(239, 68, 68, 0.45) calc(100% - 2px), rgba(239, 68, 68, 0.45) 100%)`
-             }}>
-        </div>
-
-        <div className="absolute left-1/2 top-[2cm] bottom-[2cm] border-l-2 border-dashed border-zinc-200 print:hidden pointer-events-none transform -translate-x-1/2 z-0"></div>
+             }}></div>
         
-        <div className="text-left border-b-[8px] border-zinc-900 pb-5 mb-10 relative z-10">
+        <div className="text-left border-b-[8px] border-zinc-900 pb-5 mb-10 relative z-10" style={{ columnSpan: 'all' }}>
           <div className="text-sm font-black text-zinc-500 uppercase tracking-[0.3em] mb-2" style={getTypoStyle('pubSubtitle')}>{pubSubtitle}</div>
           <h1 className="text-7xl md:text-9xl font-black tracking-tighter leading-none mb-6" style={getTypoStyle('pubName')}>{pubName}</h1>
           <div className="flex justify-between items-center text-sm font-bold text-zinc-600 border-t-2 border-zinc-200 pt-3 uppercase tracking-widest">
@@ -626,33 +483,31 @@
             </div>
           </div>
         </div>
-        <div ref={gridRef} className="print-grid text-justify text-base leading-relaxed relative z-10"
-          style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',columnGap:'2rem',alignItems:'start',...getTypoStyle('artContent')}}>
+
+        <div className="text-justify text-base leading-relaxed relative z-10"
+          style={{ columnCount: 4, columnGap: '2rem', display: 'block', ...getTypoStyle('artContent') }}>
           {articles.map(a=>(
             <div key={a.id}
-              className={`art-wrapper ${draggingId===a.id?'is-dragging':''} ${dragOverId===a.id?'drag-over-target':''} ${resizingId===a.id?'is-resizing':''}`}
-              style={{breakInside:'avoid',pageBreakInside:'avoid',gridColumn:`span ${a.colSpan||1}`,position:'relative'}}
+              className={`art-wrapper ${draggingId===a.id?'is-dragging':''} ${dragOverId===a.id?'drag-over-target':''}`}
+              style={{
+                breakInside: 'avoid',
+                pageBreakInside: 'avoid',
+                columnSpan: a.colSpan === 4 ? 'all' : 'none',
+                display: 'inline-block',
+                width: '100%',
+                marginBottom: '2rem',
+                position: 'relative'
+              }}
               draggable={dragEnabled===a.id}
               onDragStart={e=>handleDragStart(e,a.id)}
               onDragOver={e=>handleDragOver(e,a.id)}
               onDrop={e=>handleDrop(e,a.id)}
               onDragEnd={handleDragEnd}
             >
-              <div className="art-inner pb-8 border-b-[3px] border-zinc-100" style={{ position: 'relative', height: 'max-content' }}>
-                {/* ★ Drag handle — 按住才啟動拖曳 */}
-                <div className="drag-handle print:hidden"
-                  onMouseDown={e=>{e.stopPropagation(); setDragEnabled(a.id);}}
-                  onMouseUp={()=>setDragEnabled(null)}
-                >
+              <div className="art-inner pb-8 border-b-[3px] border-zinc-100" style={{ position: 'relative' }}>
+                <div className="drag-handle print:hidden" onMouseDown={e=>{e.stopPropagation(); setDragEnabled(a.id);}} onMouseUp={()=>setDragEnabled(null)}>
                   <i className="fas fa-grip-horizontal text-[11px]"></i>
                   <span style={{fontSize:'10px'}}>{a.author||'拖曳移動'}</span>
-                </div>
-                {/* ★ Resize handle */}
-                <div className="resize-handle print:hidden"
-                  draggable={false}
-                  onMouseDown={e=>{e.stopPropagation(); handleResizeStart(e,a.id,a.colSpan||1);}}
-                  title={`目前 ${a.colSpan||1} 欄，左右拖曳調整`}>
-                  <i className="fas fa-arrows-left-right text-[12px]"></i>
                 </div>
                 <h2 className="text-3xl font-black tracking-tight mb-3 leading-tight" style={getArtTitleStyle(a)}>{a.title||'（未填標題）'}</h2>
                 <div className="flex items-center gap-2 mb-4 pb-3 border-b-2 border-zinc-900 text-sm font-bold text-zinc-500 uppercase tracking-wider" style={getTypoStyle('artAuthor')}>
@@ -667,7 +522,6 @@
       );
     };
 
-    /* ── Preview: Newsletter ── */
     const NewsletterPreview=()=>(
       <div className="bg-slate-100 w-full min-h-[297mm] print:bg-white">
         <div className="max-w-3xl mx-auto bg-white rounded-2xl shadow-lg overflow-hidden print:shadow-none print:rounded-none">
@@ -680,7 +534,7 @@
           </div>
           <div className="p-8 md:p-12 bg-slate-50 space-y-10 print:bg-white">
             {articles.map(a=>(
-              <div key={a.id} className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100 print:border-b print:shadow-none print:rounded-none print:mb-10">
+              <div key={a.id} className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100 print:border-b print:shadow-none print:rounded-none print:mb-10" style={{ breakInside: 'avoid', pageBreakInside: 'avoid' }}>
                 <h2 className="text-3xl font-bold text-slate-800 mb-3 leading-snug" style={getArtTitleStyle(a)}>{a.title||'（未填標題）'}</h2>
                 <div className="flex items-center gap-2 text-rose-500 text-sm font-semibold mb-6 pb-5 border-b-2 border-slate-100" style={getTypoStyle('artAuthor')}>
                   <i className="fas fa-user-circle text-[18px]"></i>{a.author||'（未填作者）'}
@@ -690,10 +544,6 @@
                 </div>
               </div>
             ))}
-          </div>
-          <div className="py-10 bg-slate-800 text-center text-slate-400 text-sm">
-            <p className="font-bold text-slate-300 text-base tracking-widest">感謝您的閱讀 ❤️</p>
-            <p className="mt-2 text-xs opacity-60">由學生作品排版產生器發送</p>
           </div>
         </div>
       </div>
@@ -708,11 +558,8 @@
             <button onClick={closeGallery} className="absolute top-4 right-4 z-20 w-9 h-9 bg-white/90 rounded-full shadow hover:bg-gray-100 text-gray-600 flex items-center justify-center">
               <i className="fas fa-times text-[18px]"></i>
             </button>
-            {/* Album sidebar */}
             <div className="w-full md:w-56 bg-gray-50 border-r border-gray-200 p-4 flex flex-col h-full shrink-0">
-              <h2 className="text-base font-bold text-gray-800 mb-4 flex items-center gap-2">
-                <i className="fas fa-folder text-indigo-500"></i> 相簿分類
-              </h2>
+              <h2 className="text-base font-bold text-gray-800 mb-4 flex items-center gap-2"><i className="fas fa-folder text-indigo-500"></i> 相簿分類</h2>
               <div className="flex-1 overflow-y-auto space-y-1.5 pr-1">
                 {albums.map(alb=>(
                   <div key={alb.id} onClick={()=>setActiveAlbum(alb.id)}
@@ -722,30 +569,18 @@
                         onBlur={()=>saveAlbumName(alb.id)} onKeyDown={e=>e.key==='Enter'&&saveAlbumName(alb.id)}
                         className="w-full text-sm p-1 rounded outline-none ring-1 ring-indigo-300" onClick={e=>e.stopPropagation()}/>
                     ):(
-                      <span className="truncate text-sm font-semibold flex-1" onDoubleClick={()=>{setEditAlbumId(alb.id);setEditAlbumName(alb.name);}}>
-                        {alb.name}
-                      </span>
+                      <span className="truncate text-sm font-semibold flex-1" onDoubleClick={()=>{setEditAlbumId(alb.id);setEditAlbumName(alb.name);}}>{alb.name}</span>
                     )}
-                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                      <button onClick={e=>{e.stopPropagation();setEditAlbumId(alb.id);setEditAlbumName(alb.name);}} className="p-1 hover:text-indigo-600 rounded"><i className="fas fa-pen text-[11px]"></i></button>
-                      {albums.length>1&&<button onClick={e=>{e.stopPropagation();deleteAlbum(alb.id);}} className="p-1 hover:text-red-600 rounded"><i className="fas fa-trash-alt text-[11px]"></i></button>}
-                    </div>
                   </div>
                 ))}
               </div>
-              <button onClick={createAlbum} className="mt-3 w-full py-2 border-2 border-dashed border-gray-300 text-gray-600 rounded-lg hover:bg-gray-100 text-sm font-bold flex items-center justify-center gap-2 transition-colors">
-                <i className="fas fa-folder-plus text-[14px]"></i> 新增相簿
-              </button>
             </div>
-            {/* Photo grid */}
             <div className="flex-1 flex flex-col h-full bg-white">
               <div className="p-4 border-b border-gray-100 flex justify-between items-center shrink-0">
                 <div>
                   <h3 className="font-bold text-lg text-gray-800">{album?.name}</h3>
-                  <p className="text-xs text-gray-500 mt-0.5">{album?.images.length??0} 張相片</p>
                 </div>
                 <div className="flex items-center gap-3">
-                  {selectFor&&(<span className="bg-amber-100 text-amber-800 text-xs px-3 py-1.5 rounded-full font-bold border border-amber-200 flex items-center gap-1.5"><i className="fas fa-hand-pointer text-[12px]"></i> 請點選要設為配圖的相片</span>)}
                   <label className="cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition-colors shadow-sm">
                     <i className="fas fa-upload text-[14px]"></i> 上傳相片
                     <input type="file" multiple accept="image/*" className="hidden" onChange={uploadToGallery} ref={galleryRef}/>
@@ -753,23 +588,14 @@
                 </div>
               </div>
               <div className="flex-1 overflow-y-auto p-5 bg-slate-50/50">
-                {!album?.images.length?(
-                  <div className="h-full flex flex-col items-center justify-center text-gray-400 gap-3">
-                    <i className="fas fa-images text-[56px] opacity-20 text-indigo-400"></i>
-                    <p className="text-base font-semibold text-gray-600">此相簿還沒有相片</p>
-                    <p className="text-sm">請點右上角「上傳相片」</p>
-                  </div>
-                ):(
-                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-                    {album.images.map(img=>(
-                      <div key={img.id} className="relative group aspect-[4/3] rounded-xl overflow-hidden shadow-sm border border-gray-200 bg-white">
-                        <img src={img.url} className="w-full h-full object-cover cursor-pointer hover:scale-105 transition-transform duration-300" onClick={()=>selectFromGallery(img.url)} alt="相片"/>
-                        {!selectFor&&(<button onClick={()=>deleteGalleryImg(activeAlbum,img.id)} className="absolute top-2 right-2 p-1.5 bg-red-500/90 hover:bg-red-600 text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"><i className="fas fa-trash-alt text-[13px]"></i></button>)}
-                        {selectFor&&(<div onClick={()=>selectFromGallery(img.url)} className="absolute inset-0 bg-indigo-600/20 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer flex items-center justify-center"><div className="bg-indigo-600 text-white px-3 py-1.5 rounded-full text-sm font-bold shadow-lg flex items-center gap-1.5 transform translate-y-2 group-hover:translate-y-0 transition-all"><i className="fas fa-check text-[14px]"></i> 設為配圖</div></div>)}
-                      </div>
-                    ))}
-                  </div>
-                )}
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+                  {album?.images.map(img=>(
+                    <div key={img.id} className="relative group aspect-[4/3] rounded-xl overflow-hidden shadow-sm border border-gray-200 bg-white">
+                      <img src={img.url} className="w-full h-full object-cover cursor-pointer hover:scale-105 transition-transform duration-300" onClick={()=>selectFromGallery(img.url)} alt="相片"/>
+                      {!selectFor&&(<button onClick={()=>deleteGalleryImg(activeAlbum,img.id)} className="absolute top-2 right-2 p-1.5 bg-red-500/90 hover:bg-red-600 text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"><i className="fas fa-trash-alt text-[13px]"></i></button>)}
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           </div>
@@ -784,37 +610,38 @@
       <div className="min-h-screen bg-gray-100 flex flex-col md:flex-row font-sans">
         <style>{`
           @media print {
-            @page { size: ${paperSize==='A3'?'A3 landscape':'390mm 270mm'}; margin: 2cm; }
-            .print-grid { padding-top: 0 !important; padding-bottom: 0 !important; }
-            .art-wrapper { padding-top: 0.2cm; padding-bottom: 0.2cm; }
-            /* 取消螢幕上的紙張邊界與陰影，全權交給 @page 處理 margin */
+            /* 強制歸零瀏覽器列印邊界，全權由程式內的 padding 負責，保證 100% 所見即所得 */
+            @page { size: ${paperSize==='A3'?'A3 landscape':'390mm 270mm'}; margin: 0 !important; }
+            body { margin: 0 !important; padding: 0 !important; background: white !important; }
             .wysiwyg-paper {
-              width: 100% !important;
-              min-height: auto !important;
-              padding: 0 !important;
+              width: ${paperSize==='A3'?'420mm':'390mm'} !important;
+              min-height: ${paperSize==='A3'?'297mm':'270mm'} !important;
+              padding: 2cm !important;
               margin: 0 !important;
+              border: none !important;
               box-shadow: none !important;
               background: transparent !important;
+              transform: none !important;
+              max-width: none !important;
             }
           }
         `}</style>
 
         {/* ═══════════ LEFT PANEL ═══════════ */}
         <div className="w-full md:w-[370px] lg:w-[400px] bg-white shadow-xl z-20 flex flex-col print:hidden h-screen overflow-y-auto shrink-0 relative panel-scroll">
-
-          {/* Toast */}
           {toast&&(<div className="toast-anim fixed top-5 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-sm px-5 py-2.5 rounded-full shadow-2xl z-[99] whitespace-nowrap">{toast}</div>)}
-
-          {/* Header */}
           <div className="p-5 bg-gradient-to-r from-rose-500 via-pink-500 to-orange-400 text-white shrink-0">
             <h1 className="text-lg font-bold flex items-center gap-2"><i className="fas fa-newspaper text-[20px]"></i> 學生作品排版產生器</h1>
             <p className="text-xs text-pink-100 mt-1 font-medium tracking-wide">🌸 母親節 × 戶外教育特刊</p>
           </div>
 
           <div className="p-5 flex-grow flex flex-col gap-5 overflow-y-auto panel-scroll">
+            
+            <div className="bg-amber-50 border border-amber-200 p-3 rounded-xl text-amber-800 text-xs leading-relaxed">
+              💡 <span className="font-bold">版面已升級為真實報紙的「瀑布流專欄」排版！</span><br/>
+              文章會由上往下自動填滿，完全消滅多餘空白。<strong className="text-red-500">列印時絕對不會再被切斷文字囉！</strong>
+            </div>
 
-            {}
-            {/* Theme picker */}
             <div>
               <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">排版風格</p>
               <div className="space-y-2">
@@ -841,7 +668,6 @@
                 </div>
               )}
               
-              {/* Zoom Control */}
               <div className="mt-5 bg-gray-50 p-3 rounded-xl border border-gray-200">
                 <div className="flex justify-between items-center mb-1.5">
                   <p className="text-xs font-bold text-gray-600 flex items-center gap-1.5"><i className="fas fa-search-plus text-[12px]"></i> 預覽畫面縮放</p>
@@ -849,14 +675,13 @@
                 </div>
                 <input type="range" min="0.3" max="1.5" step="0.05" value={zoom} onChange={e=>setZoom(Number(e.target.value))} className="w-full accent-indigo-600 cursor-pointer"/>
                 <p className="text-[10px] text-gray-400 mt-2 leading-tight">
-                  <i className="fas fa-info-circle"></i> 右側預覽為真實比例，<strong className="text-red-400">紅線為列印分頁參考線</strong>，超出版面時文章會自動跨頁。
+                  <i className="fas fa-info-circle"></i> 右側預覽為真實寬度比例。<strong className="text-red-400">紅線精準標示列印換頁處</strong>。
                 </p>
               </div>
             </div>
 
             <hr className="border-gray-100"/>
 
-            {/* Publication Settings */}
             <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 space-y-3">
               <p className="text-xs font-bold text-blue-800 flex items-center gap-1.5"><i className="fas fa-book-open text-[13px]"></i> 刊物設定</p>
               <div className="grid grid-cols-2 gap-2">
@@ -875,36 +700,6 @@
               </div>
             </div>
 
-            {}
-            {/* Typography */}
-            <div className="bg-gray-50 rounded-xl border border-gray-200">
-              <button onClick={()=>setShowTypo(!showTypo)} className="w-full flex justify-between items-center p-3.5 font-semibold text-gray-600 hover:text-blue-600 transition-colors text-sm">
-                <span className="flex items-center gap-2"><i className="fas fa-font text-[14px]"></i> 字型進階設定</span>
-                <i className={`fas ${showTypo?'fa-chevron-up':'fa-chevron-down'} text-[13px]`}></i>
-              </button>
-              {showTypo&&(
-                <div className="px-4 pb-4 space-y-3 border-t border-gray-200">
-                  {[
-                    {label:'刊物名稱',key:'pubName'},{label:'英文副標',key:'pubSubtitle'},
-                    {label:'發行日期',key:'pubDate'},{label:'作品作者',key:'artAuthor'},{label:'作品內文',key:'artContent'}
-                  ].map(item=>(
-                    <div key={item.key} className="flex items-center gap-2 mt-3">
-                      <label className="text-xs font-semibold text-gray-600 w-16 shrink-0">{item.label}</label>
-                      <select className="flex-1 p-1.5 text-xs border border-gray-300 rounded outline-none focus:border-blue-400"
-                        value={typo[item.key].font} onChange={e=>setTypo(p=>({...p,[item.key]:{...p[item.key],font:e.target.value}}))}>
-                        {fontOpts.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}
-                      </select>
-                      <div className="flex items-center gap-1 w-20 shrink-0">
-                        <input type="number" placeholder="預設" className="w-full p-1.5 text-xs border border-gray-300 rounded outline-none focus:border-blue-400"
-                          value={typo[item.key].size} onChange={e=>setTypo(p=>({...p,[item.key]:{...p[item.key],size:e.target.value}}))}/>
-                        <span className="text-xs text-gray-400">px</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
             {/* ════ ARTICLES SECTION ════ */}
             <div>
               <div className="flex justify-between items-center mb-3">
@@ -912,36 +707,33 @@
                 <span className="text-xs font-semibold text-pink-600 bg-pink-100 px-2.5 py-1 rounded-full">{articles.length} 篇</span>
               </div>
 
-              {/* ★ Student Quick-Nav (NEW) */}
               <QuickNav/>
 
               <div className="space-y-4 mt-4">
                 {articles.map((art, idx) => (
-                  /* ★ ref attached here for quick-nav scrolling */
                   <div key={art.id} ref={el => articleRefs.current[art.id] = el}
                     className="p-4 bg-white border border-gray-200 rounded-2xl shadow-sm group hover:border-pink-300 transition-all flex flex-col gap-3.5 scroll-mt-4">
 
-                    {/* Article header */}
                     <div className="flex items-center justify-between border-b border-gray-100 pb-2">
                       <div className="flex items-center gap-2">
                         <span className="text-xs font-bold text-gray-400">作品 #{idx + 1}</span>
                         {art.author && (
-                          <span className="text-xs font-bold text-rose-500 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-200">
-                            {art.author}
-                          </span>
+                          <span className="text-xs font-bold text-rose-500 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-200">{art.author}</span>
                         )}
                       </div>
                       <div className="flex items-center gap-2">
-                        {/* colSpan selector */}
+                        {/* 佔欄按鈕改為「單欄/全版」 */}
                         <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1">
-                          <i className="fas fa-table-columns text-[10px] text-slate-400"></i>
-                          <span className="text-[10px] text-slate-500 font-semibold mr-0.5">佔欄</span>
-                          {[1,2,3,4].map(n=>(
-                            <button key={n} onClick={()=>updateArticle(art.id,'colSpan',n)}
-                              className={`w-5 h-5 text-[10px] font-black rounded transition-colors ${(art.colSpan||1)===n?'bg-indigo-500 text-white':'text-slate-400 hover:bg-slate-200'}`}>
-                              {n}
-                            </button>
-                          ))}
+                          <i className="fas fa-columns text-[10px] text-slate-400"></i>
+                          <span className="text-[10px] text-slate-500 font-semibold mr-0.5">版面</span>
+                          <button onClick={()=>updateArticle(art.id,'colSpan',1)}
+                            className={`px-2 py-0.5 text-[10px] font-black rounded transition-colors ${(art.colSpan||1)!==4?'bg-indigo-500 text-white':'text-slate-400 hover:bg-slate-200'}`}>
+                            單欄
+                          </button>
+                          <button onClick={()=>updateArticle(art.id,'colSpan',4)}
+                            className={`px-2 py-0.5 text-[10px] font-black rounded transition-colors ${(art.colSpan||1)===4?'bg-indigo-500 text-white':'text-slate-400 hover:bg-slate-200'}`}>
+                            全版寬
+                          </button>
                         </div>
                         <button onClick={()=>removeArticle(art.id)} className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg opacity-0 group-hover:opacity-100 transition-all" title="刪除">
                           <i className="fas fa-trash-alt text-[13px]"></i>
@@ -949,26 +741,14 @@
                       </div>
                     </div>
 
-                    {/* Title + Mic */}
                     <div>
-                      <div className="flex items-center justify-between mb-1.5">
-                        <label className="text-xs font-semibold text-gray-600 flex items-center gap-1"><i className="fas fa-heading text-[11px]"></i> 標題</label>
-                        <div className="flex items-center gap-1">
-                          <select className="p-1 text-[10px] border border-gray-300 rounded outline-none bg-gray-50" value={art.titleTypo?.font||''} onChange={e=>updateTitleTypo(art.id,'font',e.target.value)}>
-                            {fontOpts.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}
-                          </select>
-                          <input type="number" placeholder="大小" className="w-11 p-1 text-[10px] border border-gray-300 rounded outline-none bg-gray-50" value={art.titleTypo?.size||''} onChange={e=>updateTitleTypo(art.id,'size',e.target.value)}/>
-                        </div>
-                      </div>
-                      <div className="flex gap-2">
+                      <div className="flex gap-2 mt-1">
                         <input value={art.title} onChange={e=>updateArticle(art.id,'title',e.target.value)} className="flex-1 p-2 text-sm border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-pink-300" placeholder="輸入標題，或按麥克風語音輸入…"/>
                         <MicBtn artId={art.id} field="title"/>
                       </div>
                     </div>
 
-                    {/* Author Dropdown */}
                     <div>
-                      <label className="block text-xs font-semibold text-gray-600 mb-1.5 flex items-center gap-1"><i className="fas fa-user text-[11px]"></i> 作者</label>
                       <select value={art.author} onChange={e=>updateArticle(art.id,'author',e.target.value)}
                         className="w-full p-2 text-sm border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-pink-300 bg-white">
                         <option value="">— 請選擇作者 —</option>
@@ -976,88 +756,35 @@
                       </select>
                     </div>
 
-                    {/* Content + Mic + Scaffold */}
                     <div>
-                      <div className="flex items-center justify-between mb-1.5">
-                        <label className="text-xs font-semibold text-gray-600 flex items-center gap-1"><i className="fas fa-align-left text-[11px]"></i> 內文</label>
-                        <div className="flex items-center gap-1.5">
-                          <MicBtn artId={art.id} field="content"/>
-                          <button onClick={()=>toggleScaffold(art.id)}
-                            className={`px-2.5 py-1.5 text-[11px] font-bold rounded-lg flex items-center gap-1 transition-colors border ${scaffoldOpen[art.id]?'bg-green-600 text-white border-green-700':'bg-green-50 text-green-700 border-green-200 hover:bg-green-100'}`}>
-                            <i className="fas fa-seedling text-[11px]"></i> 鷹架協助
-                          </button>
-                        </div>
-                      </div>
                       <textarea value={art.content} onChange={e=>updateArticle(art.id,'content',e.target.value)} rows={4}
                         className="w-full p-2.5 text-sm border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-pink-300 resize-y leading-relaxed"
                         placeholder="點「鷹架協助」選句子，或按麥克風🎙️用說的…"/>
-                      {scaffoldOpen[art.id]&&(
-                        <div className="mt-2 p-3.5 bg-green-50 border border-green-200 rounded-xl">
-                          <div className="flex gap-2 mb-3">
-                            {Object.entries(SCAFFOLDS).map(([key,val])=>(
-                              <button key={key} onClick={()=>setScaffoldTab(p=>({...p,[art.id]:key}))}
-                                className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-colors ${(scaffoldTab[art.id]||'motherday')===key?'bg-green-600 text-white shadow-sm':'bg-white text-green-700 border border-green-200 hover:bg-green-100'}`}>
-                                {val.label}
-                              </button>
-                            ))}
-                          </div>
-                          <p className="text-[11px] text-green-800 font-semibold mb-2.5 flex items-center gap-1">
-                            <i className="fas fa-hand-point-down text-[11px]"></i> 點一下句子加到內文，再把「___」換成你的答案
-                          </p>
-                          <div className="flex flex-wrap gap-2">
-                            {SCAFFOLDS[scaffoldTab[art.id]||'motherday'].prompts.map((prompt,i)=>(
-                              <button key={i} onClick={()=>addScaffold(art.id,prompt)}
-                                className="px-3 py-1.5 bg-white border border-green-300 text-green-800 rounded-lg text-xs font-medium hover:bg-green-600 hover:text-white hover:border-green-600 transition-all shadow-sm">
-                                {prompt}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      )}
                     </div>
 
-                    {/* Photo */}
                     <div className="pt-3 border-t border-gray-100 space-y-2.5">
                       <label className="block text-xs font-semibold text-gray-600 flex items-center gap-1"><i className="fas fa-image text-[11px]"></i> 配圖</label>
                       <div className="flex items-center gap-3">
                         {art.imageUrl?(
                           <div className="relative group/img w-16 h-16 rounded-xl overflow-hidden border border-gray-200 shadow-sm shrink-0">
                             <img src={art.imageUrl} className="w-full h-full object-cover" alt="配圖" onError={e=>e.target.style.display='none'}/>
-                            <button onClick={()=>updateArticle(art.id,'imageUrl','')} className="absolute inset-0 bg-black/60 text-white flex items-center justify-center opacity-0 group-hover/img:opacity-100 transition-opacity rounded-xl">
-                              <i className="fas fa-times-circle text-[20px]"></i>
-                            </button>
+                            <button onClick={()=>updateArticle(art.id,'imageUrl','')} className="absolute inset-0 bg-black/60 text-white flex items-center justify-center opacity-0 group-hover/img:opacity-100 transition-opacity rounded-xl"><i className="fas fa-times-circle text-[20px]"></i></button>
                           </div>
                         ):(
-                          <div className="w-16 h-16 rounded-xl border-2 border-dashed border-gray-200 bg-gray-50 flex items-center justify-center text-gray-300 shrink-0">
-                            <i className="fas fa-image text-[22px]"></i>
-                          </div>
+                          <div className="w-16 h-16 rounded-xl border-2 border-dashed border-gray-200 bg-gray-50 flex items-center justify-center text-gray-300 shrink-0"><i className="fas fa-image text-[22px]"></i></div>
                         )}
                         <div className="flex flex-col gap-1.5 flex-1 min-w-0">
                           <label className="cursor-pointer flex items-center justify-center gap-2 px-3 py-2 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 transition-colors shadow-sm">
-                            <i className="fas fa-upload text-[12px]"></i> 直接上傳照片到報紙
+                            <i className="fas fa-upload text-[12px]"></i> 上傳相片
                             <input type="file" accept="image/*" className="hidden" onChange={e=>directUpload(art.id,e)}/>
                           </label>
-                          <button onClick={()=>openGalleryFor(art.id)} className="flex items-center justify-center gap-1.5 px-3 py-1.5 bg-white text-gray-600 rounded-lg text-xs font-semibold hover:bg-gray-100 transition-colors border border-gray-200">
-                            <i className="fas fa-images text-[12px]"></i> 從相片集選擇
-                          </button>
                         </div>
                       </div>
                       {art.imageUrl&&(
                         <div className="space-y-2">
                           <div className="flex items-center gap-2 bg-gray-50 p-2 rounded-lg border border-gray-200">
-                            <span className="text-xs font-semibold text-gray-600 shrink-0">照片大小：</span>
-                            <div className="flex gap-1 flex-1">
-                              {[['small','小',60],['medium','中',80]].map(([v,l,pct])=>(
-                                <button key={v} onClick={()=>{updateArticle(art.id,'imageSize',v); updateArticle(art.id,'imageWidth',pct);}}
-                                  className={`flex-1 text-xs py-1 rounded-lg transition-colors border font-semibold ${(art.imageWidth??{small:60,medium:80}[art.imageSize]??80)===pct?'bg-indigo-600 text-white border-indigo-700':'bg-white text-gray-600 border-gray-300 hover:bg-gray-100'}`}>
-                                  {l}圖
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2 bg-gray-50 p-2 rounded-lg border border-gray-200">
                             <i className="fas fa-left-right text-[11px] text-gray-400 shrink-0"></i>
-                            <span className="text-xs font-semibold text-gray-600 shrink-0">寬度</span>
+                            <span className="text-xs font-semibold text-gray-600 shrink-0">圖片寬度</span>
                             <input type="range" min="20" max="100" step="5"
                               value={art.imageWidth ?? {small:60,medium:80}[art.imageSize] ?? 80}
                               onChange={e=>updateArticle(art.id,'imageWidth',Number(e.target.value))}
@@ -1066,10 +793,6 @@
                               {art.imageWidth ?? {small:60,medium:80}[art.imageSize] ?? 80}%
                             </span>
                           </div>
-                          <p className="text-[10px] text-gray-400 flex items-center gap-1">
-                            <i className="fas fa-hand-point-up text-[10px]"></i>
-                            也可以在預覽圖片右側拖曳藍色把手等比例縮放
-                          </p>
                         </div>
                       )}
                     </div>
@@ -1081,42 +804,13 @@
                 <i className="fas fa-plus text-[15px]"></i> 新增一篇作品
               </button>
             </div>
-
-            {/* Gallery shortcut */}
-            <div className="bg-indigo-50 p-3 rounded-xl border border-indigo-100">
-              <div className="flex justify-between items-center">
-                <span className="text-xs font-bold text-indigo-800 flex items-center gap-1.5"><i className="fas fa-folder text-[13px]"></i> 班級相片集管理</span>
-                <button onClick={()=>{setSelectFor(null);setGalleryOpen(true);}} className="text-xs bg-indigo-600 text-white px-3 py-1.5 rounded-lg hover:bg-indigo-700 transition-colors flex items-center gap-1 shadow-sm font-semibold">
-                  <i className="fas fa-images text-[12px]"></i> 管理相片
-                </button>
-              </div>
-            </div>
-
           </div>
 
-          {}
-          {/* Bottom bar */}
           <div className="p-4 bg-gray-50 border-t border-gray-100 shrink-0 flex flex-col gap-2.5">
-            <input type="file" accept=".json" className="hidden" ref={jsonInputRef} onChange={loadDraftFile}/>
-            <p className="text-[11px] text-gray-400 text-center leading-snug">
-              💡 <span className="font-semibold text-gray-500">換電腦</span>請用「匯出」帶走 .json，到新電腦「載入檔案」即可還原
-            </p>
-            <div className="flex gap-2">
-              <button onClick={saveDraft} className="flex-1 flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 rounded-lg text-sm transition-colors shadow-sm">
-                <i className="fas fa-file-export text-[13px]"></i> 匯出進度
-              </button>
-              <button onClick={()=>jsonInputRef.current?.click()} className="flex-1 flex items-center justify-center gap-1.5 bg-white border-2 border-emerald-400 text-emerald-700 hover:bg-emerald-50 font-bold py-2.5 rounded-lg text-sm transition-colors">
-                <i className="fas fa-file-import text-[13px]"></i> 載入檔案
-              </button>
-            </div>
-            <button onClick={loadDraftLocal} className="w-full flex items-center justify-center gap-1.5 bg-white border border-gray-300 hover:bg-gray-50 text-gray-600 font-semibold py-2 rounded-lg text-xs transition-colors">
-              <i className="fas fa-desktop text-[12px]"></i> 讀取此電腦的暫存
-            </button>
             <button onClick={()=>window.print()} className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-rose-500 to-orange-400 hover:from-rose-600 hover:to-orange-500 text-white font-bold py-3 rounded-xl transition-all shadow-md">
               <i className="fas fa-print text-[18px]"></i> 列印 / 匯出 PDF
             </button>
           </div>
-
         </div>
 
         {/* ═══════════ RIGHT PREVIEW ═══════════ */}
