@@ -110,7 +110,8 @@
     const [typo, setTypo] = useState({
       pubName:    { font: '', size: '' }, pubSubtitle:{ font: '', size: '' },
       pubDate:    { font: '', size: '' }, artAuthor:  { font: '', size: '' },
-      artContent: { font: '', size: '' },
+      artTitle:   { font: '', size: '' },
+      artContent: { font: '', size: '', lineHeight: '' },
     });
     const [showTypo, setShowTypo] = useState(false);
 
@@ -119,8 +120,8 @@
       { label: '明體', value: 'serif' },
       { label: '楷體', value: '"BiauKai","DFKai-SB","KaiTi","標楷體",serif' },
     ];
-    const getTypoStyle   = (key) => { const s={}; if(typo[key]?.font) s.fontFamily=typo[key].font; if(typo[key]?.size) s.fontSize=`${typo[key].size}px`; return s; };
-    const getArtTitleStyle = (art) => { const s={}; if(art.titleTypo?.font) s.fontFamily=art.titleTypo.font; if(art.titleTypo?.size) s.fontSize=`${art.titleTypo.size}px`; return s; };
+    const getTypoStyle   = (key) => { const s={}; if(typo[key]?.font) s.fontFamily=typo[key].font; if(typo[key]?.size) s.fontSize=`${typo[key].size}px`; if(typo[key]?.lineHeight) s.lineHeight=typo[key].lineHeight; return s; };
+    const getArtTitleStyle = (art) => { const s={}; if(art.titleTypo?.font) s.fontFamily=art.titleTypo.font; else if(typo.artTitle?.font) s.fontFamily=typo.artTitle.font; if(art.titleTypo?.size) s.fontSize=`${art.titleTypo.size}px`; else if(typo.artTitle?.size) s.fontSize=`${typo.artTitle.size}px`; return s; };
 
     const [articles, setArticles] = useState(DEFAULT_ARTICLES);
 
@@ -660,6 +661,56 @@
                 <input type="range" min="0.3" max="1.5" step="0.05" value={zoom} onChange={e=>setZoom(Number(e.target.value))} className="w-full accent-indigo-600 cursor-pointer"/>
                 <p className="text-[10px] text-gray-400 mt-2 leading-tight">
                   <i className="fas fa-info-circle"></i> 右側預覽為真實寬度比例。列印時可由瀏覽器的設定來自訂邊界空白。
+                </p>
+              </div>
+
+              {/* Layout Squeeze/Stretch Adjustments */}
+              <div className="mt-5 bg-indigo-50/60 p-3.5 rounded-xl border border-indigo-100 space-y-4">
+                <p className="text-xs font-bold text-indigo-800 flex items-center gap-1.5 border-b border-indigo-100 pb-2">
+                  <i className="fas fa-expand-arrows-alt text-[13px]"></i> 版面飽滿度微調 (填滿空白)
+                </p>
+
+                <div>
+                  <div className="flex justify-between items-center mb-1.5">
+                    <span className="text-xs font-semibold text-gray-700">整體作品標題大小</span>
+                    <span className="text-xs font-mono font-bold text-indigo-600 bg-white border border-indigo-100 px-2 py-0.5 rounded">
+                      {typo.artTitle?.size || (theme === 'retro' ? 24 : theme === 'modern' ? 30 : 24)} px
+                    </span>
+                  </div>
+                  <input type="range" min="16" max="40" step="1"
+                    value={typo.artTitle?.size || (theme === 'retro' ? 24 : theme === 'modern' ? 30 : 24)}
+                    onChange={e=>setTypo(p=>({...p, artTitle: {...(p.artTitle||{}), size: e.target.value}}))}
+                    className="w-full accent-indigo-600 cursor-pointer"/>
+                </div>
+
+                <div>
+                  <div className="flex justify-between items-center mb-1.5">
+                    <span className="text-xs font-semibold text-gray-700">整體內文字體大小</span>
+                    <span className="text-xs font-mono font-bold text-indigo-600 bg-white border border-indigo-100 px-2 py-0.5 rounded">
+                      {typo.artContent?.size || (theme === 'retro' ? 15 : 16)} px
+                    </span>
+                  </div>
+                  <input type="range" min="12" max="28" step="1"
+                    value={typo.artContent?.size || (theme === 'retro' ? 15 : 16)}
+                    onChange={e=>setTypo(p=>({...p, artContent: {...(p.artContent||{}), size: e.target.value}}))}
+                    className="w-full accent-indigo-600 cursor-pointer"/>
+                </div>
+
+                <div>
+                  <div className="flex justify-between items-center mb-1.5">
+                    <span className="text-xs font-semibold text-gray-700">整體內文行距</span>
+                    <span className="text-xs font-mono font-bold text-indigo-600 bg-white border border-indigo-100 px-2 py-0.5 rounded">
+                      {typo.artContent?.lineHeight || 1.6}
+                    </span>
+                  </div>
+                  <input type="range" min="1.2" max="3.0" step="0.1"
+                    value={typo.artContent?.lineHeight || 1.6}
+                    onChange={e=>setTypo(p=>({...p, artContent: {...(p.artContent||{}), lineHeight: e.target.value}}))}
+                    className="w-full accent-indigo-600 cursor-pointer"/>
+                </div>
+
+                <p className="text-[10px] text-gray-500 leading-tight">
+                  💡 覺得最後一頁太空嗎？稍微調大<strong className="text-indigo-600">字體</strong>或<strong className="text-indigo-600">行距</strong>，就能讓文章完美撐滿紙張囉！
                 </p>
               </div>
             </div>
