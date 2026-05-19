@@ -101,7 +101,7 @@
   /* ───── App ───── */
   function App() {
     const [pubName, setPubName]         = useState('六年甲班小報');
-    const [pubSubtitle, setPubSubtitle] = useState('CLASS TIMES');
+    const [pubSubtitle, setPubSubtitle] = useState('母親節 × 戶外教育特刊');
     const [pubDate, setPubDate]         = useState('2026年5月11日');
     const [theme, setTheme]             = useState('retro');
     const [paperSize, setPaperSize]     = useState('A3');
@@ -132,13 +132,37 @@
       if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
     };
 
+    /* ── Reorder Functions ── */
+    const moveArticle = (index, direction) => {
+      setArticles(prev => {
+        const arr = [...prev];
+        if (direction === 'up' && index > 0) {
+          [arr[index - 1], arr[index]] = [arr[index], arr[index - 1]];
+        } else if (direction === 'down' && index < arr.length - 1) {
+          [arr[index], arr[index + 1]] = [arr[index + 1], arr[index]];
+        }
+        return arr;
+      });
+    };
+
+    const shuffleArticles = () => {
+      setArticles(prev => {
+        const arr = [...prev];
+        for (let i = arr.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [arr[i], arr[j]] = [arr[j], arr[i]];
+        }
+        return arr;
+      });
+    };
+
     /* ── Drag-to-reorder ── */
     const [draggingId, setDraggingId] = useState(null);
     const [dragOverId, setDragOverId] = useState(null);
-    const [dragEnabled, setDragEnabled] = useState(null); // only set when grip is held
+    const [dragEnabled, setDragEnabled] = useState(null);
 
     const handleDragStart = (e, artId) => {
-      if (dragEnabled !== artId) { e.preventDefault(); return; } // block unless grip held
+      if (dragEnabled !== artId) { e.preventDefault(); return; }
       setDraggingId(artId);
       e.dataTransfer.effectAllowed = 'move';
     };
@@ -245,14 +269,14 @@
     /* ── Save / Load ── */
     const getSnapshot=()=>({pubName,pubSubtitle,pubDate,typo,articles,theme,paperSize});
     const saveDraft=()=>{
-      localStorage.setItem('np_draft_v4',JSON.stringify(getSnapshot()));
+      localStorage.setItem('np_draft_v5',JSON.stringify(getSnapshot()));
       const blob=new Blob([JSON.stringify(getSnapshot(),null,2)],{type:'application/json'});
       const url=URL.createObjectURL(blob); const a=document.createElement('a');
       a.href=url; a.download=`班級小報_${pubDate.replace(/[年月日]/g,'')}.json`; a.click(); URL.revokeObjectURL(url);
       showToast('💾 已下載進度檔，換電腦時載入即可！');
     };
     const loadDraftLocal=()=>{
-      const raw=localStorage.getItem('np_draft_v4');
+      const raw=localStorage.getItem('np_draft_v5');
       if(!raw){showToast('📂 此電腦沒有暫存資料，請改用「載入檔案」。'); return;}
       try{
         const p=JSON.parse(raw);
@@ -274,7 +298,7 @@
           if(p.pubDate) setPubDate(p.pubDate); if(p.typo) setTypo(p.typo);
           if(p.articles) setArticles(p.articles); if(p.theme) setTheme(p.theme);
           if(p.paperSize) setPaperSize(p.paperSize);
-          localStorage.setItem('np_draft_v4',JSON.stringify(p));
+          localStorage.setItem('np_draft_v5',JSON.stringify(p));
           showToast('✅ 已從檔案載入進度！');
         }catch{showToast('❌ 檔案格式有誤，請選正確的 .json 進度檔。');}
       };
@@ -400,38 +424,27 @@
       <div className={`wysiwyg-paper bg-[#f4ebd8] text-stone-900 font-serif border border-stone-300 mx-auto shadow-xl print:shadow-none print:border-none relative p-8 md:p-12`}
            style={{ width: paperW, minHeight: paperH, boxSizing: 'border-box' }}>
         
-        <div className="text-left border-b-[6px] border-double border-stone-800 pb-6 mb-8 relative z-10 w-full" style={{ columnSpan: 'all' }}>
-          {pubSubtitle&&<div className="text-lg tracking-[0.4em] font-bold text-stone-600 mb-3" style={getTypoStyle('pubSubtitle')}>【 {pubSubtitle} 】</div>}
-          <h1 className="text-6xl md:text-8xl font-black mb-6 text-stone-900 tracking-widest" style={getTypoStyle('pubName')}>{pubName}</h1>
-          <div className="flex justify-between items-center text-sm border-t-2 border-b-2 border-stone-800 py-2 px-2 font-bold uppercase tracking-wider">
-            <div className="flex gap-4"><span>🌸 母親節特刊 × 戶外教育 🌿</span></div>
-            <div className="flex gap-6 text-right">
+        {/* === 修改點：高度壓縮整合的 Header === */}
+        <div className="text-left border-b-[4px] border-double border-stone-800 pb-3 mb-6 relative z-10 w-full" style={{ columnSpan: 'all' }}>
+          <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+            <div className="flex items-baseline flex-wrap gap-x-4 gap-y-2">
+              <h1 className="text-6xl md:text-7xl font-black text-stone-900 tracking-widest leading-none" style={getTypoStyle('pubName')}>{pubName}</h1>
+              {pubSubtitle && <span className="text-2xl font-bold text-stone-600 tracking-widest" style={getTypoStyle('pubSubtitle')}>{pubSubtitle}</span>}
+            </div>
+            <div className="flex items-center gap-6 text-sm font-bold text-stone-700 whitespace-nowrap mb-1">
               <span style={getTypoStyle('pubDate')}>發行日期：{pubDate}</span>
-              <span>收錄：{articles.length} 篇</span>
+              <span className="bg-stone-800 text-[#f4ebd8] px-3 py-1">收錄：{articles.length} 篇</span>
             </div>
           </div>
         </div>
 
-        {/* 專欄排版 (Multi-column) - 解決列印切割與留白問題 */}
         <div className="text-justify text-[15px] leading-relaxed relative z-10"
           style={{ columnCount: 4, columnGap: '2rem', display: 'block', ...getTypoStyle('artContent') }}>
           {articles.map(a=>(
             <div key={a.id}
               className={`art-wrapper ${draggingId===a.id?'is-dragging':''} ${dragOverId===a.id?'drag-over-target':''}`}
-              style={{
-                breakInside: 'avoid',
-                pageBreakInside: 'avoid',
-                columnSpan: a.colSpan === 4 ? 'all' : 'none',
-                display: 'inline-block', // inline-block ensures safe pagination in columns
-                width: '100%',
-                marginBottom: '2rem',
-                position: 'relative'
-              }}
-              draggable={dragEnabled===a.id}
-              onDragStart={e=>handleDragStart(e,a.id)}
-              onDragOver={e=>handleDragOver(e,a.id)}
-              onDrop={e=>handleDrop(e,a.id)}
-              onDragEnd={handleDragEnd}
+              style={{ breakInside: 'avoid', pageBreakInside: 'avoid', columnSpan: a.colSpan === 4 ? 'all' : 'none', display: 'inline-block', width: '100%', marginBottom: '2rem', position: 'relative' }}
+              draggable={dragEnabled===a.id} onDragStart={e=>handleDragStart(e,a.id)} onDragOver={e=>handleDragOver(e,a.id)} onDrop={e=>handleDrop(e,a.id)} onDragEnd={handleDragEnd}
             >
               <div className="art-inner pb-5 border-b-2 border-dotted border-stone-400/60" style={{ position: 'relative' }}>
                 <div className="drag-handle print:hidden" onMouseDown={e=>{e.stopPropagation(); setDragEnabled(a.id);}} onMouseUp={()=>setDragEnabled(null)}>
@@ -457,12 +470,14 @@
       <div className={`wysiwyg-paper bg-white text-zinc-900 font-sans mx-auto shadow-xl print:shadow-none relative p-8 md:p-12`}
            style={{ width: paperW, minHeight: paperH, boxSizing: 'border-box' }}>
         
-        <div className="text-left border-b-[8px] border-zinc-900 pb-5 mb-10 relative z-10" style={{ columnSpan: 'all' }}>
-          <div className="text-sm font-black text-zinc-500 uppercase tracking-[0.3em] mb-2" style={getTypoStyle('pubSubtitle')}>{pubSubtitle}</div>
-          <h1 className="text-7xl md:text-9xl font-black tracking-tighter leading-none mb-6" style={getTypoStyle('pubName')}>{pubName}</h1>
-          <div className="flex justify-between items-center text-sm font-bold text-zinc-600 border-t-2 border-zinc-200 pt-3 uppercase tracking-widest">
-            <span className="text-zinc-800">🌸 母親節 × 戶外教育特刊 🌿</span>
-            <div className="flex items-center gap-4">
+        {/* === 修改點：高度壓縮整合的 Header === */}
+        <div className="text-left border-b-[8px] border-zinc-900 pb-4 mb-8 relative z-10 w-full" style={{ columnSpan: 'all' }}>
+          <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+            <div className="flex items-baseline flex-wrap gap-x-4 gap-y-2">
+              <h1 className="text-7xl md:text-8xl font-black text-zinc-900 tracking-tighter leading-none" style={getTypoStyle('pubName')}>{pubName}</h1>
+              {pubSubtitle && <span className="text-2xl font-black text-zinc-500 uppercase tracking-widest" style={getTypoStyle('pubSubtitle')}>{pubSubtitle}</span>}
+            </div>
+            <div className="flex items-center gap-6 text-sm font-bold text-zinc-600 whitespace-nowrap mb-2 uppercase tracking-widest">
               <span style={getTypoStyle('pubDate')}>發行日期：{pubDate}</span>
               <span className="bg-zinc-900 text-white px-3 py-1">收錄：{articles.length} 篇</span>
             </div>
@@ -474,20 +489,8 @@
           {articles.map(a=>(
             <div key={a.id}
               className={`art-wrapper ${draggingId===a.id?'is-dragging':''} ${dragOverId===a.id?'drag-over-target':''}`}
-              style={{
-                breakInside: 'avoid',
-                pageBreakInside: 'avoid',
-                columnSpan: a.colSpan === 4 ? 'all' : 'none',
-                display: 'inline-block',
-                width: '100%',
-                marginBottom: '2rem',
-                position: 'relative'
-              }}
-              draggable={dragEnabled===a.id}
-              onDragStart={e=>handleDragStart(e,a.id)}
-              onDragOver={e=>handleDragOver(e,a.id)}
-              onDrop={e=>handleDrop(e,a.id)}
-              onDragEnd={handleDragEnd}
+              style={{ breakInside: 'avoid', pageBreakInside: 'avoid', columnSpan: a.colSpan === 4 ? 'all' : 'none', display: 'inline-block', width: '100%', marginBottom: '2rem', position: 'relative' }}
+              draggable={dragEnabled===a.id} onDragStart={e=>handleDragStart(e,a.id)} onDragOver={e=>handleDragOver(e,a.id)} onDrop={e=>handleDrop(e,a.id)} onDragEnd={handleDragEnd}
             >
               <div className="art-inner pb-8 border-b-[3px] border-zinc-100" style={{ position: 'relative' }}>
                 <div className="drag-handle print:hidden" onMouseDown={e=>{e.stopPropagation(); setDragEnabled(a.id);}} onMouseUp={()=>setDragEnabled(null)}>
@@ -512,7 +515,7 @@
         <div className="max-w-3xl mx-auto bg-white rounded-2xl shadow-lg overflow-hidden print:shadow-none print:rounded-none">
           <div className="bg-gradient-to-br from-pink-500 via-rose-500 to-orange-400 p-16 text-center text-white">
             <div className="inline-block bg-white/20 px-5 py-2 rounded-full text-xs font-bold tracking-[0.2em] mb-6" style={getTypoStyle('pubSubtitle')}>
-              🌸 母親節 × 戶外教育特刊 🌿　{pubSubtitle}
+              {pubSubtitle}
             </div>
             <h1 className="text-5xl md:text-6xl font-black leading-tight mb-4 tracking-tight" style={getTypoStyle('pubName')}>{pubName}</h1>
             <div className="text-pink-100 text-base font-medium" style={getTypoStyle('pubDate')}>{pubDate}</div>
@@ -595,7 +598,6 @@
       <div className="min-h-screen bg-gray-100 flex flex-col md:flex-row font-sans">
         <style>{`
           @media print {
-            /* 讓瀏覽器接管列印邊界，使用者可於列印時自訂 */
             @page { size: ${paperSize==='A3'?'A3 landscape':'390mm 270mm'}; }
             body { background: white !important; }
             .wysiwyg-paper {
@@ -624,7 +626,7 @@
             
             <div className="bg-amber-50 border border-amber-200 p-3 rounded-xl text-amber-800 text-xs leading-relaxed">
               💡 <span className="font-bold">版面已升級為真實報紙的「瀑布流專欄」排版！</span><br/>
-              文章會由上往下自動填滿，完全消滅多餘空白。列印時不會切斷文字，<strong className="text-red-500">請記得在列印視窗自訂邊界喔！</strong>
+              文章會由上往下自動填滿。列印時不會切斷文字，<strong className="text-red-500">請記得在列印視窗自訂邊界喔！</strong>
             </div>
 
             <div>
@@ -659,9 +661,6 @@
                   <span className="text-xs font-mono font-bold text-indigo-600 bg-indigo-100 px-2 py-0.5 rounded">{Math.round(zoom * 100)}%</span>
                 </div>
                 <input type="range" min="0.3" max="1.5" step="0.05" value={zoom} onChange={e=>setZoom(Number(e.target.value))} className="w-full accent-indigo-600 cursor-pointer"/>
-                <p className="text-[10px] text-gray-400 mt-2 leading-tight">
-                  <i className="fas fa-info-circle"></i> 右側預覽為真實寬度比例。列印時可由瀏覽器的設定來自訂邊界空白。
-                </p>
               </div>
 
               {/* Layout Squeeze/Stretch Adjustments */}
@@ -669,7 +668,6 @@
                 <p className="text-xs font-bold text-indigo-800 flex items-center gap-1.5 border-b border-indigo-100 pb-2">
                   <i className="fas fa-expand-arrows-alt text-[13px]"></i> 版面飽滿度微調 (填滿空白)
                 </p>
-
                 <div>
                   <div className="flex justify-between items-center mb-1.5">
                     <span className="text-xs font-semibold text-gray-700">整體作品標題大小</span>
@@ -682,7 +680,6 @@
                     onChange={e=>setTypo(p=>({...p, artTitle: {...(p.artTitle||{}), size: e.target.value}}))}
                     className="w-full accent-indigo-600 cursor-pointer"/>
                 </div>
-
                 <div>
                   <div className="flex justify-between items-center mb-1.5">
                     <span className="text-xs font-semibold text-gray-700">整體內文字體大小</span>
@@ -695,7 +692,6 @@
                     onChange={e=>setTypo(p=>({...p, artContent: {...(p.artContent||{}), size: e.target.value}}))}
                     className="w-full accent-indigo-600 cursor-pointer"/>
                 </div>
-
                 <div>
                   <div className="flex justify-between items-center mb-1.5">
                     <span className="text-xs font-semibold text-gray-700">整體內文行距</span>
@@ -708,14 +704,39 @@
                     onChange={e=>setTypo(p=>({...p, artContent: {...(p.artContent||{}), lineHeight: e.target.value}}))}
                     className="w-full accent-indigo-600 cursor-pointer"/>
                 </div>
-
-                <p className="text-[10px] text-gray-500 leading-tight">
-                  💡 覺得最後一頁太空嗎？稍微調大<strong className="text-indigo-600">字體</strong>或<strong className="text-indigo-600">行距</strong>，就能讓文章完美撐滿紙張囉！
-                </p>
               </div>
             </div>
 
             <hr className="border-gray-100"/>
+
+            {/* Typography */}
+            <div className="bg-gray-50 rounded-xl border border-gray-200">
+              <button onClick={()=>setShowTypo(!showTypo)} className="w-full flex justify-between items-center p-3.5 font-semibold text-gray-600 hover:text-blue-600 transition-colors text-sm">
+                <span className="flex items-center gap-2"><i className="fas fa-font text-[14px]"></i> 字型進階設定</span>
+                <i className={`fas ${showTypo?'fa-chevron-up':'fa-chevron-down'} text-[13px]`}></i>
+              </button>
+              {showTypo&&(
+                <div className="px-4 pb-4 space-y-3 border-t border-gray-200">
+                  {[
+                    {label:'刊物名稱',key:'pubName'},{label:'副標題',key:'pubSubtitle'},
+                    {label:'發行日期',key:'pubDate'},{label:'作品作者',key:'artAuthor'},{label:'作品內文',key:'artContent'}
+                  ].map(item=>(
+                    <div key={item.key} className="flex items-center gap-2 mt-3">
+                      <label className="text-xs font-semibold text-gray-600 w-16 shrink-0">{item.label}</label>
+                      <select className="flex-1 p-1.5 text-xs border border-gray-300 rounded outline-none focus:border-blue-400"
+                        value={typo[item.key].font} onChange={e=>setTypo(p=>({...p,[item.key]:{...p[item.key],font:e.target.value}}))}>
+                        {fontOpts.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}
+                      </select>
+                      <div className="flex items-center gap-1 w-20 shrink-0">
+                        <input type="number" placeholder="預設" className="w-full p-1.5 text-xs border border-gray-300 rounded outline-none focus:border-blue-400"
+                          value={typo[item.key].size} onChange={e=>setTypo(p=>({...p,[item.key]:{...p[item.key],size:e.target.value}}))}/>
+                        <span className="text-xs text-gray-400">px</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
 
             <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 space-y-3">
               <p className="text-xs font-bold text-blue-800 flex items-center gap-1.5"><i className="fas fa-book-open text-[13px]"></i> 刊物設定</p>
@@ -725,7 +746,7 @@
                   <input value={pubName} onChange={e=>setPubName(e.target.value)} className="w-full p-2 text-sm border border-blue-200 rounded-lg outline-none bg-white focus:ring-2 focus:ring-blue-400"/>
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-blue-700 mb-1">英文副標</label>
+                  <label className="block text-xs font-semibold text-blue-700 mb-1">副標題 (特刊名稱)</label>
                   <input value={pubSubtitle} onChange={e=>setPubSubtitle(e.target.value)} className="w-full p-2 text-sm border border-blue-200 rounded-lg outline-none bg-white focus:ring-2 focus:ring-blue-400"/>
                 </div>
               </div>
@@ -738,8 +759,14 @@
             {/* ════ ARTICLES SECTION ════ */}
             <div>
               <div className="flex justify-between items-center mb-3">
-                <p className="text-sm font-bold text-gray-700">學生作品</p>
-                <span className="text-xs font-semibold text-pink-600 bg-pink-100 px-2.5 py-1 rounded-full">{articles.length} 篇</span>
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-bold text-gray-700">學生作品</p>
+                  <span className="text-xs font-semibold text-pink-600 bg-pink-100 px-2 py-0.5 rounded-full">{articles.length} 篇</span>
+                </div>
+                {/* 隨機排列按鈕 */}
+                <button onClick={shuffleArticles} title="隨機打亂文章順序來自動補滿空隙" className="text-[11px] font-bold text-indigo-600 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 px-2 py-1.5 rounded flex items-center gap-1 transition-colors">
+                  <i className="fas fa-random"></i> 隨機排列 (自動補空隙)
+                </button>
               </div>
 
               <QuickNav/>
@@ -751,13 +778,17 @@
 
                     <div className="flex items-center justify-between border-b border-gray-100 pb-2">
                       <div className="flex items-center gap-2">
-                        <span className="text-xs font-bold text-gray-400">作品 #{idx + 1}</span>
+                        {/* 上下移動按鈕 */}
+                        <div className="flex flex-col gap-0.5 mr-1 bg-gray-100 rounded-md p-0.5 border border-gray-200">
+                          <button onClick={() => moveArticle(idx, 'up')} disabled={idx===0} title="上移一篇" className="w-6 h-5 flex items-center justify-center text-gray-500 hover:text-indigo-600 hover:bg-white rounded shadow-sm disabled:opacity-30 disabled:shadow-none transition-all"><i className="fas fa-chevron-up text-[10px]"></i></button>
+                          <button onClick={() => moveArticle(idx, 'down')} disabled={idx===articles.length-1} title="下移一篇" className="w-6 h-5 flex items-center justify-center text-gray-500 hover:text-indigo-600 hover:bg-white rounded shadow-sm disabled:opacity-30 disabled:shadow-none transition-all"><i className="fas fa-chevron-down text-[10px]"></i></button>
+                        </div>
+                        <span className="text-xs font-bold text-gray-400 w-12">#{idx + 1}</span>
                         {art.author && (
                           <span className="text-xs font-bold text-rose-500 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-200">{art.author}</span>
                         )}
                       </div>
                       <div className="flex items-center gap-2">
-                        {/* 佔欄按鈕改為「單欄/全版」 */}
                         <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1">
                           <i className="fas fa-columns text-[10px] text-slate-400"></i>
                           <span className="text-[10px] text-slate-500 font-semibold mr-0.5">版面</span>
