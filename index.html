@@ -10,6 +10,15 @@
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   
+  <!-- 🚀 終極修復：手動註冊 Babel 設定，完全關閉自動 import 機制，確保瀏覽器 100% 能執行 -->
+  <script>
+      Babel.registerPreset('my-react-classic', {
+          presets: [
+              [Babel.availablePresets['react'], { runtime: 'classic' }]
+          ]
+      });
+  </script>
+
   <style>
     @media print {
       body { -webkit-print-color-adjust: exact; print-color-adjust: exact; zoom: 1 !important; }
@@ -62,7 +71,12 @@
 </head>
 <body>
 <div id="root"></div>
-<script type="text/babel">
+
+<!-- 💡 套用我們剛剛註冊的 'my-react-classic'，捨棄會報錯的預設值 -->
+<script type="text/babel" data-presets="my-react-classic">
+  /** @jsx React.createElement */
+  /** @jsxFrag React.Fragment */
+
   const { useState, useRef, useCallback, useEffect } = React;
 
   /* ───── Constants ───── */
@@ -422,7 +436,7 @@
       const paperH = paperSize === 'A3' ? '297mm' : '270mm';
       return (
       <div className={`wysiwyg-paper bg-[#f4ebd8] text-stone-900 font-serif border border-stone-300 mx-auto shadow-xl print:shadow-none print:border-none relative p-8 md:p-12`}
-           style={{ width: paperW, minHeight: paperH, boxSizing: 'border-box' }}>
+            style={{ width: paperW, minHeight: paperH, boxSizing: 'border-box' }}>
         
         {/* === 修改點：高度壓縮整合的 Header === */}
         <div className="text-left border-b-[4px] border-double border-stone-800 pb-3 mb-6 relative z-10 w-full" style={{ columnSpan: 'all' }}>
@@ -468,7 +482,7 @@
       const paperH = paperSize === 'A3' ? '297mm' : '270mm';
       return (
       <div className={`wysiwyg-paper bg-white text-zinc-900 font-sans mx-auto shadow-xl print:shadow-none relative p-8 md:p-12`}
-           style={{ width: paperW, minHeight: paperH, boxSizing: 'border-box' }}>
+            style={{ width: paperW, minHeight: paperH, boxSizing: 'border-box' }}>
         
         {/* === 修改點：高度壓縮整合的 Header === */}
         <div className="text-left border-b-[8px] border-zinc-900 pb-4 mb-8 relative z-10 w-full" style={{ columnSpan: 'all' }}>
@@ -592,7 +606,7 @@
     };
 
     /* ════════════════════════════════════════
-       ── Main Render ──
+        ── Main Render ──
     ════════════════════════════════════════ */
     return (
       <div className="min-h-screen bg-gray-100 flex flex-col md:flex-row font-sans">
